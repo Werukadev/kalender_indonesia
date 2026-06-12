@@ -14,7 +14,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _api = ApiService();
+  final _scrollController = ScrollController();
   late DateTime _currentMonth;
+  DateTime? _selectedDate;
   List<Holiday>? _holidays;
   bool _isLoading = false;
   String? _error;
@@ -26,6 +28,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month);
     _loadHolidays();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onDayTap(DateTime date) {
+    setState(() {
+      _selectedDate = (_selectedDate?.day == date.day &&
+              _selectedDate?.month == date.month &&
+              _selectedDate?.year == date.year)
+          ? null
+          : date;
+    });
+    if (_selectedDate != null) {
+      Future.delayed(const Duration(milliseconds: 50), () {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+        );
+      });
+    }
   }
 
   Future<void> _loadHolidays() async {
@@ -82,6 +109,86 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _selectYear(BuildContext context) async {
+    final currentYear = _currentMonth.year;
+    final firstYear = 2010;
+    final lastYear = DateTime.now().year + 5;
+
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Pilih Tahun',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 280,
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      childAspectRatio: 1.4,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                    ),
+                    itemCount: lastYear - firstYear + 1,
+                    itemBuilder: (_, i) {
+                      final year = firstYear + i;
+                      final isSelected = year == currentYear;
+                      return GestureDetector(
+                        onTap: () => Navigator.pop(ctx, year),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFFCC0001)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? const Color(0xFFCC0001)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$year',
+                            style: TextStyle(
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color:
+                                  isSelected ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected != null && selected != currentYear) {
+      setState(() {
+        _currentMonth = DateTime(selected, _currentMonth.month);
+        _holidays = null;
+      });
+      _loadHolidays();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -122,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
             currentMonth: _currentMonth,
             onPrev: _prevMonth,
             onNext: _nextMonth,
+            onYearTap: () => _selectYear(context),
             primaryColor: primaryColor,
           ),
           Expanded(
@@ -183,6 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return SingleChildScrollView(
+      controller: _scrollController,
       physics: const ClampingScrollPhysics(),
       child: Column(
         children: [
@@ -190,8 +299,13 @@ class _HomeScreenState extends State<HomeScreen> {
             year: _currentMonth.year,
             month: _currentMonth.month,
             holidays: _holidays ?? [],
+            selectedDate: _selectedDate,
+            onDayTap: _onDayTap,
           ),
-          EventList(holidays: _holidays ?? []),
+          EventList(
+            holidays: _holidays ?? [],
+            selectedDate: _selectedDate,
+          ),
           const SizedBox(height: 24),
         ],
       ),
@@ -203,12 +317,14 @@ class _MonthHeader extends StatelessWidget {
   final DateTime currentMonth;
   final VoidCallback onPrev;
   final VoidCallback onNext;
+  final VoidCallback onYearTap;
   final Color primaryColor;
 
   const _MonthHeader({
     required this.currentMonth,
     required this.onPrev,
     required this.onNext,
+    required this.onYearTap,
     required this.primaryColor,
   });
 
@@ -226,13 +342,23 @@ class _MonthHeader extends StatelessWidget {
             onPressed: onPrev,
             splashRadius: 20,
           ),
-          Text(
-            monthName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+          GestureDetector(
+            onTap: onYearTap,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  monthName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
+              ],
             ),
           ),
           IconButton(

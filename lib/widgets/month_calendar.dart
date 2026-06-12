@@ -5,12 +5,16 @@ class MonthCalendar extends StatelessWidget {
   final int year;
   final int month;
   final List<Holiday> holidays;
+  final DateTime? selectedDate;
+  final ValueChanged<DateTime>? onDayTap;
 
   const MonthCalendar({
     super.key,
     required this.year,
     required this.month,
     required this.holidays,
+    this.selectedDate,
+    this.onDayTap,
   });
 
   Map<int, List<Holiday>> _buildHolidayMap() {
@@ -88,17 +92,21 @@ class MonthCalendar extends StatelessWidget {
               final dayHolidays = holidayMap[day] ?? [];
               final isWeekend = date.weekday >= 6; // Sat=6, Sun=7
               final isToday = _isToday(date);
+              final isSelected = selectedDate != null &&
+                  selectedDate!.year == year &&
+                  selectedDate!.month == month &&
+                  selectedDate!.day == day;
 
               return _DayCell(
                 day: day,
                 isWeekend: isWeekend,
                 isToday: isToday,
+                isSelected: isSelected,
                 holidays: dayHolidays,
+                onTap: () => onDayTap?.call(date),
               );
             },
           ),
-          const SizedBox(height: 8),
-          _CalendarLegend(),
         ],
       ),
     );
@@ -112,89 +120,21 @@ class MonthCalendar extends StatelessWidget {
   }
 }
 
-class _CalendarLegend extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 6,
-        alignment: WrapAlignment.center,
-        children: const [
-          _LegendItem(
-            color: Color(0xFFE53935),
-            label: 'Libur Nasional',
-            isBox: true,
-          ),
-          _LegendItem(
-            color: Color(0xFFF57C00),
-            label: 'Cuti Bersama',
-            isBox: true,
-          ),
-          _LegendItem(
-            color: Color(0xFF1565C0),
-            label: 'Hari Besar Nasional',
-          ),
-          _LegendItem(
-            color: Color(0xFF7B1FA2),
-            label: 'Hari Besar Internasional',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  final bool isBox;
-
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    this.isBox = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (isBox)
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          )
-        else
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.black87)),
-      ],
-    );
-  }
-}
-
 class _DayCell extends StatelessWidget {
   final int day;
   final bool isWeekend;
   final bool isToday;
+  final bool isSelected;
   final List<Holiday> holidays;
+  final VoidCallback? onTap;
 
   const _DayCell({
     required this.day,
     required this.isWeekend,
     required this.isToday,
+    required this.isSelected,
     required this.holidays,
+    this.onTap,
   });
 
   static const _liburColor = Color(0xFFE53935);
@@ -210,34 +150,28 @@ class _DayCell extends StatelessWidget {
     final hasHBI =
         holidays.any((h) => h.type == HolidayType.hariBesarInternasional);
 
-    Color? bgColor;
     Color textColor;
 
-    if (hasLibur) {
-      bgColor = _liburColor;
-      textColor = Colors.white;
-    } else if (hasCuti) {
-      bgColor = _cutiColor;
-      textColor = Colors.white;
-    } else if (isWeekend) {
+    if (hasLibur || isWeekend) {
       textColor = _liburColor;
+    } else if (hasCuti) {
+      textColor = _cutiColor;
     } else {
       textColor = Colors.black87;
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: isSelected ? const Color(0xFFCC0001).withValues(alpha: 0.1) : null,
         borderRadius: BorderRadius.circular(7),
         border: isToday
-            ? Border.all(
-                color: bgColor != null
-                    ? Colors.white.withValues(alpha: 0.8)
-                    : const Color(0xFFCC0001),
-                width: 2,
-              )
-            : null,
+            ? Border.all(color: const Color(0xFFCC0001), width: 2)
+            : isSelected
+                ? Border.all(color: const Color(0xFFCC0001).withValues(alpha: 0.5), width: 1.5)
+                : null,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -281,6 +215,7 @@ class _DayCell extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }

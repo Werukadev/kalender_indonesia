@@ -4,8 +4,9 @@ import '../models/holiday.dart';
 
 class EventList extends StatelessWidget {
   final List<Holiday> holidays;
+  final DateTime? selectedDate;
 
-  const EventList({super.key, required this.holidays});
+  const EventList({super.key, required this.holidays, this.selectedDate});
 
   static const _liburColor = Color(0xFFE53935);
   static const _cutiColor = Color(0xFFF57C00);
@@ -91,14 +92,18 @@ class EventList extends StatelessWidget {
             final date = entry.key;
             final dayHolidays = entry.value;
             final dateStr = DateFormat('EEE, d MMM', 'id').format(date);
+            final isHighlighted = selectedDate != null &&
+                date.year == selectedDate!.year &&
+                date.month == selectedDate!.month &&
+                date.day == selectedDate!.day;
             return dayHolidays.asMap().entries.map((e) {
               return _EventTile(
                 dateStr: e.key == 0 ? dateStr : '',
                 name: e.value.name,
-                shortLabel: e.value.type.shortLabel,
                 color: _typeColor(e.value.type),
                 isFirst: e.key == 0,
                 isLast: e.key == dayHolidays.length - 1,
+                isHighlighted: isHighlighted,
               );
             });
           }),
@@ -112,24 +117,33 @@ class EventList extends StatelessWidget {
 class _EventTile extends StatelessWidget {
   final String dateStr;
   final String name;
-  final String shortLabel;
   final Color color;
   final bool isFirst;
   final bool isLast;
+  final bool isHighlighted;
 
   const _EventTile({
     required this.dateStr,
     required this.name,
-    required this.shortLabel,
     required this.color,
     required this.isFirst,
     required this.isLast,
+    this.isHighlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(14, isFirst ? 8 : 2, 14, isLast ? 4 : 2),
+    return Container(
+      margin: EdgeInsets.fromLTRB(8, isFirst ? 6 : 1, 8, isLast ? 4 : 1),
+      decoration: isHighlighted
+          ? BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.35), width: 1),
+            )
+          : null,
+      child: Padding(
+      padding: EdgeInsets.fromLTRB(6, isFirst ? 6 : 2, 6, isLast ? 4 : 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -158,25 +172,9 @@ class _EventTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
-            ),
-            child: Text(
-              shortLabel,
-              style: TextStyle(
-                fontSize: 9,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
         ],
       ),
+    ),
     );
   }
 }
