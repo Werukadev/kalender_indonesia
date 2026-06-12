@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/holiday.dart';
+import '../providers/settings_provider.dart';
 
 class MonthCalendar extends StatelessWidget {
   final int year;
@@ -30,10 +32,11 @@ class MonthCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final holidayMap = _buildHolidayMap();
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-    // Mon=1..Sun=7, offset: Mon=0..Sun=6
     final startOffset = (firstDay.weekday - 1) % 7;
 
     const weekDayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
@@ -42,7 +45,7 @@ class MonthCalendar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -54,7 +57,6 @@ class MonthCalendar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Day of week headers
           Row(
             children: List.generate(7, (i) {
               final isWeekend = i >= 5;
@@ -67,7 +69,7 @@ class MonthCalendar extends StatelessWidget {
                       fontSize: 12,
                       color: isWeekend
                           ? Colors.red.shade600
-                          : Colors.grey.shade600,
+                          : colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -75,7 +77,6 @@ class MonthCalendar extends StatelessWidget {
             }),
           ),
           const Divider(height: 10, thickness: 0.5),
-          // Calendar grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -90,7 +91,7 @@ class MonthCalendar extends StatelessWidget {
               final day = index - startOffset + 1;
               final date = DateTime(year, month, day);
               final dayHolidays = holidayMap[day] ?? [];
-              final isWeekend = date.weekday >= 6; // Sat=6, Sun=7
+              final isWeekend = date.weekday >= 6;
               final isToday = _isToday(date);
               final isSelected = selectedDate != null &&
                   selectedDate!.year == year &&
@@ -103,6 +104,7 @@ class MonthCalendar extends StatelessWidget {
                 isToday: isToday,
                 isSelected: isSelected,
                 holidays: dayHolidays,
+                settingFontWeight: settings.resolvedFontWeight,
                 onTap: () => onDayTap?.call(date),
               );
             },
@@ -127,6 +129,7 @@ class _DayCell extends StatelessWidget {
   final bool isSelected;
   final List<Holiday> holidays;
   final VoidCallback? onTap;
+  final FontWeight settingFontWeight;
 
   const _DayCell({
     required this.day,
@@ -134,6 +137,7 @@ class _DayCell extends StatelessWidget {
     required this.isToday,
     required this.isSelected,
     required this.holidays,
+    required this.settingFontWeight,
     this.onTap,
   });
 
@@ -144,6 +148,7 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final hasLibur = holidays.any((h) => h.type == HolidayType.liburNasional);
     final hasCuti = holidays.any((h) => h.type == HolidayType.cutiBersama);
     final hasHBN = holidays.any((h) => h.type == HolidayType.hariBesarNasional);
@@ -151,71 +156,79 @@ class _DayCell extends StatelessWidget {
         holidays.any((h) => h.type == HolidayType.hariBesarInternasional);
 
     Color textColor;
-
     if (hasLibur || isWeekend) {
       textColor = _liburColor;
     } else if (hasCuti) {
       textColor = _cutiColor;
     } else {
-      textColor = Colors.black87;
+      textColor = colorScheme.onSurface;
     }
+
+    final fontWeight = isToday || settingFontWeight == FontWeight.bold
+        ? FontWeight.bold
+        : FontWeight.w500;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      margin: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFCC0001).withValues(alpha: 0.1) : null,
-        borderRadius: BorderRadius.circular(7),
-        border: isToday
-            ? Border.all(color: const Color(0xFFCC0001), width: 2)
-            : isSelected
-                ? Border.all(color: const Color(0xFFCC0001).withValues(alpha: 0.5), width: 1.5)
-                : null,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$day',
-            style: TextStyle(
-              color: textColor,
-              fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-              fontSize: 13,
-            ),
-          ),
-          if (hasHBN || hasHBI)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (hasHBN)
-                    Container(
-                      width: 5,
-                      height: 5,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: const BoxDecoration(
-                        color: _hbnColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  if (hasHBI)
-                    Container(
-                      width: 5,
-                      height: 5,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: const BoxDecoration(
-                        color: _hbiColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                ],
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colorScheme.primary.withValues(alpha: 0.15)
+              : null,
+          borderRadius: BorderRadius.circular(7),
+          border: isToday
+              ? Border.all(color: colorScheme.primary, width: 2)
+              : isSelected
+                  ? Border.all(
+                      color: colorScheme.primary.withValues(alpha: 0.5),
+                      width: 1.5,
+                    )
+                  : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$day',
+              style: TextStyle(
+                color: textColor,
+                fontWeight: fontWeight,
+                fontSize: 13,
               ),
             ),
-        ],
+            if (hasHBN || hasHBI)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (hasHBN)
+                      Container(
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: const BoxDecoration(
+                          color: _hbnColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    if (hasHBI)
+                      Container(
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: const BoxDecoration(
+                          color: _hbiColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/holiday.dart';
+import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Holiday>? _holidays;
   bool _isLoading = false;
   String? _error;
+  bool _isOfflineCache = false;
+  DateTime? _cacheTimestamp;
   double _dragStartX = 0;
 
   @override
@@ -61,13 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     try {
-      final holidays = await _api.getHolidays(
+      final result = await _api.getHolidays(
         _currentMonth.year,
         _currentMonth.month,
       );
       if (mounted) {
         setState(() {
-          _holidays = holidays;
+          _holidays = result.holidays;
+          _isOfflineCache = result.isFromCache;
+          _cacheTimestamp = result.cachedAt;
           _isLoading = false;
         });
       }
@@ -81,10 +88,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _resetMonthState() {
+    _holidays = null;
+    _isOfflineCache = false;
+    _cacheTimestamp = null;
+  }
+
   void _prevMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
-      _holidays = null;
+      _resetMonthState();
     });
     _loadHolidays();
   }
@@ -92,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _nextMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
-      _holidays = null;
+      _resetMonthState();
     });
     _loadHolidays();
   }
@@ -103,22 +116,26 @@ class _HomeScreenState extends State<HomeScreen> {
     if (today != _currentMonth) {
       setState(() {
         _currentMonth = today;
-        _holidays = null;
+        _resetMonthState();
       });
       _loadHolidays();
     }
   }
 
   Future<void> _selectYear(BuildContext context) async {
+    final preset =
+        Provider.of<SettingsProvider>(context, listen: false).selectedPreset;
+    final primaryColor = preset.primaryColor;
     final currentYear = _currentMonth.year;
-    final firstYear = 2010;
+    const firstYear = 2010;
     final lastYear = DateTime.now().year + 5;
 
     final selected = await showDialog<int>(
       context: context,
       builder: (ctx) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -148,12 +165,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? const Color(0xFFCC0001)
+                                ? primaryColor
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected
-                                  ? const Color(0xFFCC0001)
+                                  ? primaryColor
                                   : Colors.grey.shade300,
                             ),
                           ),
@@ -164,8 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal,
-                              color:
-                                  isSelected ? Colors.white : Colors.black87,
+                              color: isSelected ? Colors.white : null,
                             ),
                           ),
                         ),
@@ -183,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selected != null && selected != currentYear) {
       setState(() {
         _currentMonth = DateTime(selected, _currentMonth.month);
-        _holidays = null;
+        _resetMonthState();
       });
       _loadHolidays();
     }
@@ -191,14 +207,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final settings = Provider.of<SettingsProvider>(context);
+    final preset = settings.selectedPreset;
+    final filteredHolidays = (_holidays ?? [])
+        .where((h) => settings.isTypeVisible(h.type))
+        .toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: primaryColor,
+        backgroundColor: preset.primaryColor,
         foregroundColor: Colors.white,
         elevation: 2,
+        leading: IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: 'Pengaturan',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
+        ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -223,70 +250,79 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _MonthHeader(
-            currentMonth: _currentMonth,
-            onPrev: _prevMonth,
-            onNext: _nextMonth,
-            onYearTap: () => _selectYear(context),
-            primaryColor: primaryColor,
-          ),
-          Expanded(
-            child: GestureDetector(
-              onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
-              onHorizontalDragEnd: (d) {
-                final dx = d.globalPosition.dx - _dragStartX;
-                if (dx < -50) _nextMonth();
-                if (dx > 50) _prevMonth();
-              },
-              child: _buildBody(),
-            ),
-          ),
-        ],
+      body: GestureDetector(
+        onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
+        onHorizontalDragEnd: (d) {
+          final dx = d.globalPosition.dx - _dragStartX;
+          if (dx < -50) _nextMonth();
+          if (dx > 50) _prevMonth();
+        },
+        child: _buildBody(preset.headerColor, filteredHolidays),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(Color headerColor, List<Holiday> holidays) {
+    final header = _MonthHeader(
+      currentMonth: _currentMonth,
+      onPrev: _prevMonth,
+      onNext: _nextMonth,
+      onYearTap: () => _selectYear(context),
+      headerColor: headerColor,
+    );
+
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Memuat data...', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
+      return Column(
+        children: [
+          header,
+          const Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('Memuat data...', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text(
-                'Gagal memuat data',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
+      return Column(
+        children: [
+          header,
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Gagal memuat data',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Coba Lagi'),
+                      onPressed: _loadHolidays,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.refresh),
-                label: const Text('Coba Lagi'),
-                onPressed: _loadHolidays,
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
 
@@ -295,18 +331,65 @@ class _HomeScreenState extends State<HomeScreen> {
       physics: const ClampingScrollPhysics(),
       child: Column(
         children: [
+          header,
+          if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
           MonthCalendar(
             year: _currentMonth.year,
             month: _currentMonth.month,
-            holidays: _holidays ?? [],
+            holidays: holidays,
             selectedDate: _selectedDate,
             onDayTap: _onDayTap,
           ),
           EventList(
-            holidays: _holidays ?? [],
+            holidays: holidays,
             selectedDate: _selectedDate,
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineBanner extends StatelessWidget {
+  final DateTime? cachedAt;
+
+  const _OfflineBanner({this.cachedAt});
+
+  @override
+  Widget build(BuildContext context) {
+    String label = 'Data dari cache tersimpan';
+    if (cachedAt != null) {
+      final d = cachedAt!;
+      final now = DateTime.now();
+      final diff = now.difference(d);
+      if (diff.inMinutes < 60) {
+        label = 'Cache · ${diff.inMinutes} menit lalu';
+      } else if (diff.inHours < 24) {
+        label = 'Cache · ${diff.inHours} jam lalu';
+      } else {
+        label = 'Cache · ${diff.inDays} hari lalu';
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF8E1),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, size: 13, color: Color(0xFFF59E0B)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: Color(0xFF92400E),
+                letterSpacing: 0.1,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -318,21 +401,21 @@ class _MonthHeader extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final VoidCallback onYearTap;
-  final Color primaryColor;
+  final Color headerColor;
 
   const _MonthHeader({
     required this.currentMonth,
     required this.onPrev,
     required this.onNext,
     required this.onYearTap,
-    required this.primaryColor,
+    required this.headerColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final monthName = DateFormat('MMMM yyyy', 'id').format(currentMonth);
     return Container(
-      color: primaryColor.withValues(alpha: 0.9),
+      color: headerColor,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

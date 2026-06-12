@@ -13,11 +13,37 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.2.0
   intl: ^0.19.0
+  provider: ^6.1.2
+  shared_preferences: ^2.3.3
+  package_info_plus: ^8.0.0
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/logo.png"
+  web:
+    generate: true
+    image_path: "assets/logo.png"
+    background_color: "#ffffff"
+    theme_color: "#6B8F71"
+  windows:
+    generate: true
+    image_path: "assets/logo.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/logo.png"
+  linux:
+    generate: true
+    image_path: "assets/logo.png"
 
 flutter:
   uses-material-design: true

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/holiday.dart';
+import '../providers/settings_provider.dart';
 
 class EventList extends StatelessWidget {
   final List<Holiday> holidays;
@@ -39,13 +41,20 @@ class EventList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final fontWeight = settings.resolvedFontWeight;
+
     if (holidays.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(20),
+      return Padding(
+        padding: const EdgeInsets.all(20),
         child: Center(
           child: Text(
             'Tidak ada hari besar bulan ini.',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
+            style: TextStyle(
+              color: colorScheme.onSurface.withValues(alpha: 0.4),
+              fontSize: 13,
+            ),
           ),
         ),
       );
@@ -56,7 +65,7 @@ class EventList extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -73,14 +82,18 @@ class EventList extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
             child: Row(
               children: [
-                const Icon(Icons.event_note_outlined, size: 16, color: Colors.grey),
+                Icon(
+                  Icons.event_note_outlined,
+                  size: 16,
+                  color: colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Hari Besar & Libur',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
-                    color: Colors.grey.shade700,
+                    color: colorScheme.onSurface.withValues(alpha: 0.6),
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -104,6 +117,7 @@ class EventList extends StatelessWidget {
                 isFirst: e.key == 0,
                 isLast: e.key == dayHolidays.length - 1,
                 isHighlighted: isHighlighted,
+                fontWeight: fontWeight,
               );
             });
           }),
@@ -121,6 +135,7 @@ class _EventTile extends StatelessWidget {
   final bool isFirst;
   final bool isLast;
   final bool isHighlighted;
+  final FontWeight fontWeight;
 
   const _EventTile({
     required this.dateStr,
@@ -128,11 +143,14 @@ class _EventTile extends StatelessWidget {
     required this.color,
     required this.isFirst,
     required this.isLast,
+    required this.fontWeight,
     this.isHighlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       margin: EdgeInsets.fromLTRB(8, isFirst ? 6 : 1, 8, isLast ? 4 : 1),
       decoration: isHighlighted
@@ -143,38 +161,44 @@ class _EventTile extends StatelessWidget {
             )
           : null,
       child: Padding(
-      padding: EdgeInsets.fromLTRB(6, isFirst ? 6 : 2, 6, isLast ? 4 : 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 88,
-            child: Text(
-              dateStr,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.black54,
+        padding: EdgeInsets.fromLTRB(6, isFirst ? 6 : 2, 6, isLast ? 4 : 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 88,
+              child: Text(
+                dateStr,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: fontWeight == FontWeight.bold
+                      ? FontWeight.bold
+                      : FontWeight.w600,
+                  color: colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
               ),
             ),
-          ),
-          Container(
-            width: 7,
-            height: 7,
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
-          ),
-        ],
+            Expanded(
+              child: Text(
+                name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: fontWeight,
+                  color: colorScheme.onSurface,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }
