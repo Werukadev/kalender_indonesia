@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _selectedDate;
   List<Holiday>? _holidays;
   bool _isLoading = false;
+  bool _isRefreshing = false;
   String? _error;
   bool _isOfflineCache = false;
   DateTime? _cacheTimestamp;
@@ -63,30 +64,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadHolidays() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    _error = null;
+
+    // Phase 1: show cached data immediately — no spinner if cache exists
+    final cached =
+        await _api.getCached(_currentMonth.year, _currentMonth.month);
+    if (!mounted) return;
+
+    if (cached != null) {
+      setState(() {
+        _holidays = cached.holidays;
+        _isOfflineCache = false;
+        _cacheTimestamp = cached.cachedAt;
+        _isLoading = false;
+        _isRefreshing = true;
+      });
+    } else {
+      setState(() {
+        _isLoading = true;
+        _isRefreshing = false;
+      });
+    }
+
+    // Phase 2: refresh from network silently in background
     try {
-      final result = await _api.getHolidays(
-        _currentMonth.year,
-        _currentMonth.month,
-      );
-      if (mounted) {
-        setState(() {
-          _holidays = result.holidays;
-          _isOfflineCache = result.isFromCache;
-          _cacheTimestamp = result.cachedAt;
-          _isLoading = false;
-        });
-      }
+      final fresh =
+          await _api.fetchFresh(_currentMonth.year, _currentMonth.month);
+      if (!mounted) return;
+      setState(() {
+        _holidays = fresh.holidays;
+        _isOfflineCache = false;
+        _cacheTimestamp = null;
+        _isLoading = false;
+        _isRefreshing = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+        if (_holidays != null) {
+          // Keep showing cached data, just flag as offline
+          _isOfflineCache = true;
+        } else {
           _error = e.toString();
-          _isLoading = false;
-        });
-      }
+        }
+      });
     }
   }
 
@@ -94,6 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _holidays = null;
     _isOfflineCache = false;
     _cacheTimestamp = null;
+    _isRefreshing = false;
+    _error = null;
   }
 
   void _prevMonth() {
@@ -245,6 +270,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         centerTitle: true,
         actions: [
+          if (_isRefreshing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white60),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.today_outlined),
             tooltip: 'Hari Ini',
@@ -265,6 +302,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody(Color headerColor, List<Holiday> holidays) {
+    final size = MediaQuery.of(context).size;
+    final isTabletLandscape =
+        size.shortestSide >= 600 && size.width > size.height;
+
     final header = _MonthHeader(
       currentMonth: _currentMonth,
       onPrev: _prevMonth,
@@ -273,64 +314,20 @@ class _HomeScreenState extends State<HomeScreen> {
       headerColor: headerColor,
     );
 
-    if (_isLoading) {
-      return Column(
-        children: [
-          header,
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
-                  Text('Memuat data...', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+    final calendar = MonthCalendar(
+      year: _currentMonth.year,
+      month: _currentMonth.month,
+      holidays: holidays,
+      selectedDate: _selectedDate,
+      onDayTap: _onDayTap,
+    );
 
-    if (_error != null) {
-      return Column(
-        children: [
-          header,
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Gagal memuat data',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Coba Lagi'),
-                      onPressed: _loadHolidays,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    final size = MediaQuery.of(context).size;
-    final isTabletLandscape =
-        size.shortestSide >= 600 && size.width > size.height;
+    // Holiday area: loading card / error card / event list
+    final Widget holidaySection = _isLoading
+        ? const _HolidayLoadingCard()
+        : _error != null
+            ? _HolidayErrorCard(onRetry: _loadHolidays)
+            : EventList(holidays: holidays, selectedDate: _selectedDate);
 
     if (isTabletLandscape) {
       return Column(
@@ -345,13 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   flex: 5,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.only(bottom: 24),
-                    child: MonthCalendar(
-                      year: _currentMonth.year,
-                      month: _currentMonth.month,
-                      holidays: holidays,
-                      selectedDate: _selectedDate,
-                      onDayTap: _onDayTap,
-                    ),
+                    child: calendar,
                   ),
                 ),
                 VerticalDivider(
@@ -366,10 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   flex: 4,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.only(bottom: 24),
-                    child: EventList(
-                      holidays: holidays,
-                      selectedDate: _selectedDate,
-                    ),
+                    child: holidaySection,
                   ),
                 ),
               ],
@@ -386,17 +374,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           header,
           if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
-          MonthCalendar(
-            year: _currentMonth.year,
-            month: _currentMonth.month,
-            holidays: holidays,
-            selectedDate: _selectedDate,
-            onDayTap: _onDayTap,
-          ),
-          EventList(
-            holidays: holidays,
-            selectedDate: _selectedDate,
-          ),
+          calendar,
+          holidaySection,
           const SizedBox(height: 24),
         ],
       ),
@@ -442,6 +421,106 @@ class _OfflineBanner extends StatelessWidget {
                 letterSpacing: 0.1,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HolidayLoadingCard extends StatelessWidget {
+  const _HolidayLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Memuat hari besar...',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HolidayErrorCard extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _HolidayErrorCard({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.wifi_off_rounded,
+            size: 18,
+            color: colorScheme.onSurface.withValues(alpha: 0.35),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Gagal memuat data hari besar',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Coba Lagi'),
           ),
         ],
       ),
