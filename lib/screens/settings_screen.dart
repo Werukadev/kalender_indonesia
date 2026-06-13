@@ -111,6 +111,18 @@ class SettingsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
+          _sectionLabel('KALENDER JAWA'),
+          _SettingsCard(
+            children: [
+              _JavaneseCalendarToggle(
+                isEnabled: settings.showJavaneseCalendar,
+                onToggle: () => settings.setShowJavaneseCalendar(
+                  !settings.showJavaneseCalendar,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           _sectionLabel('TEKS'),
           _SettingsCard(
             children: [
@@ -164,6 +176,16 @@ class SettingsScreen extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
+              ),
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                color: colorScheme.onSurface.withValues(alpha: 0.08),
+              ),
+              _CellBorderToggle(
+                isEnabled: settings.showCellBorder,
+                onToggle: () =>
+                    settings.setShowCellBorder(!settings.showCellBorder),
               ),
             ],
           ),
@@ -441,6 +463,145 @@ class _HolidayTypeToggle extends StatelessWidget {
               onChanged: isLastEnabled ? null : (_) => onToggle(),
               activeThumbColor: Colors.white,
               activeTrackColor: typeColor,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Cell Border Toggle ─────────────────────────────────────────────────────────
+
+class _CellBorderToggle extends StatelessWidget {
+  final bool isEnabled;
+  final VoidCallback onToggle;
+
+  const _CellBorderToggle({required this.isEnabled, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 11, 12, 11),
+        child: Row(
+          children: [
+            Icon(
+              Icons.border_all_outlined,
+              size: 20,
+              color: isEnabled
+                  ? colorScheme.primary
+                  : colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tampilkan Border Sel',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isEnabled
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tampilkan garis tepi pada setiap sel tanggal',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurface.withValues(
+                        alpha: isEnabled ? 0.45 : 0.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: isEnabled,
+              onChanged: (_) => onToggle(),
+              activeThumbColor: Colors.white,
+              activeTrackColor: colorScheme.primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Javanese Calendar Toggle ───────────────────────────────────────────────────
+
+class _JavaneseCalendarToggle extends StatelessWidget {
+  final bool isEnabled;
+  final VoidCallback onToggle;
+
+  const _JavaneseCalendarToggle({
+    required this.isEnabled,
+    required this.onToggle,
+  });
+
+  static const _toggleColor = Color(0xFF2E7D32);
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 11, 12, 11),
+        child: Row(
+          children: [
+            Icon(
+              Icons.auto_stories_outlined,
+              size: 20,
+              color: isEnabled
+                  ? _toggleColor
+                  : colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tampilkan Pasaran Jawa',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isEnabled
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Menampilkan pasaran dan weton Jawa pada kalender',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurface.withValues(
+                        alpha: isEnabled ? 0.45 : 0.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: isEnabled,
+              onChanged: (_) => onToggle(),
+              activeThumbColor: Colors.white,
+              activeTrackColor: _toggleColor,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ],

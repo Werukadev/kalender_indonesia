@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
+import '../services/javanese_calendar_service.dart';
 
 class MonthCalendar extends StatelessWidget {
   final int year;
@@ -34,6 +35,8 @@ class MonthCalendar extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final showJavanese = settings.showJavaneseCalendar;
+    final showCellBorder = settings.showCellBorder;
     final holidayMap = _buildHolidayMap();
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
@@ -100,11 +103,14 @@ class MonthCalendar extends StatelessWidget {
 
               return _DayCell(
                 day: day,
+                date: date,
                 isWeekend: isWeekend,
                 isToday: isToday,
                 isSelected: isSelected,
                 holidays: dayHolidays,
                 settingFontWeight: settings.resolvedFontWeight,
+                showJavanese: showJavanese,
+                showCellBorder: showCellBorder,
                 onTap: () => onDayTap?.call(date),
               );
             },
@@ -124,20 +130,26 @@ class MonthCalendar extends StatelessWidget {
 
 class _DayCell extends StatelessWidget {
   final int day;
+  final DateTime date;
   final bool isWeekend;
   final bool isToday;
   final bool isSelected;
   final List<Holiday> holidays;
   final VoidCallback? onTap;
   final FontWeight settingFontWeight;
+  final bool showJavanese;
+  final bool showCellBorder;
 
   const _DayCell({
     required this.day,
+    required this.date,
     required this.isWeekend,
     required this.isToday,
     required this.isSelected,
     required this.holidays,
     required this.settingFontWeight,
+    required this.showJavanese,
+    required this.showCellBorder,
     this.onTap,
   });
 
@@ -184,30 +196,54 @@ class _DayCell extends StatelessWidget {
                       color: colorScheme.primary.withValues(alpha: 0.5),
                       width: 1.5,
                     )
-                  : null,
+                  : showCellBorder
+                      ? Border.all(
+                          color: colorScheme.onSurface.withValues(alpha: 0.1),
+                          width: 0.5,
+                        )
+                      : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Text(
-              '$day',
-              style: TextStyle(
-                color: textColor,
-                fontWeight: fontWeight,
-                fontSize: 13,
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$day',
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: fontWeight,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (showJavanese)
+                    Text(
+                      getPasaran(date).toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w500,
+                        color: textColor.withValues(alpha: 0.7),
+                        height: 1.1,
+                        letterSpacing: 0,
+                      ),
+                      overflow: TextOverflow.clip,
+                    ),
+                ],
               ),
             ),
             if (hasHBN || hasHBI)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
+              Positioned(
+                top: 4,
+                right: 4,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (hasHBN)
                       Container(
                         width: 5,
                         height: 5,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        margin: const EdgeInsets.only(left: 1),
                         decoration: const BoxDecoration(
                           color: _hbnColor,
                           shape: BoxShape.circle,
@@ -217,7 +253,7 @@ class _DayCell extends StatelessWidget {
                       Container(
                         width: 5,
                         height: 5,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        margin: const EdgeInsets.only(left: 1),
                         decoration: const BoxDecoration(
                           color: _hbiColor,
                           shape: BoxShape.circle,

@@ -14,12 +14,16 @@ class SettingsProvider extends ChangeNotifier {
   AppFontWeight _fontWeight = AppFontWeight.standard;
   String _selectedThemeId = kThemePresets.first.id;
   Set<HolidayType> _visibleTypes = HolidayType.values.toSet();
+  bool _showJavaneseCalendar = false;
+  bool _showCellBorder = true;
 
   ThemeMode get themeMode => _themeMode;
   AppTextSize get textSize => _textSize;
   AppFontWeight get fontWeight => _fontWeight;
   String get selectedThemeId => _selectedThemeId;
   Set<HolidayType> get visibleTypes => Set.unmodifiable(_visibleTypes);
+  bool get showJavaneseCalendar => _showJavaneseCalendar;
+  bool get showCellBorder => _showCellBorder;
 
   ThemePreset get selectedPreset => kThemePresets.firstWhere(
         (p) => p.id == _selectedThemeId,
@@ -58,6 +62,8 @@ class SettingsProvider extends ChangeNotifier {
     _selectedThemeId =
         kThemePresets.any((p) => p.id == tid) ? tid : kThemePresets.first.id;
     _visibleTypes = _bitmaskToTypes(vm);
+    _showJavaneseCalendar = prefs.getBool('showJavanese') ?? false;
+    _showCellBorder = prefs.getBool('showCellBorder') ?? true;
 
     notifyListeners();
   }
@@ -92,6 +98,22 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     prefs.setString('themeId', id);
+  }
+
+  Future<void> setShowJavaneseCalendar(bool value) async {
+    if (_showJavaneseCalendar == value) return;
+    _showJavaneseCalendar = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('showJavanese', value);
+  }
+
+  Future<void> setShowCellBorder(bool value) async {
+    if (_showCellBorder == value) return;
+    _showCellBorder = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('showCellBorder', value);
   }
 
   // Returns false if the toggle was blocked (last enabled type).

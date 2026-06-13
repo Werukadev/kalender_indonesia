@@ -49,13 +49,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ? null
           : date;
     });
-    if (_selectedDate != null) {
+    if (_selectedDate != null && _scrollController.hasClients) {
       Future.delayed(const Duration(milliseconds: 50), () {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-        );
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+          );
+        }
       });
     }
   }
@@ -320,6 +322,57 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final size = MediaQuery.of(context).size;
+    final isTabletLandscape =
+        size.shortestSide >= 600 && size.width > size.height;
+
+    if (isTabletLandscape) {
+      return Column(
+        children: [
+          header,
+          if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: MonthCalendar(
+                      year: _currentMonth.year,
+                      month: _currentMonth.month,
+                      holidays: holidays,
+                      selectedDate: _selectedDate,
+                      onDayTap: _onDayTap,
+                    ),
+                  ),
+                ),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 0.5,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.12),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: EventList(
+                      holidays: holidays,
+                      selectedDate: _selectedDate,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
