@@ -83,7 +83,7 @@ class _AboutAppDialogState extends State<AboutAppDialog> {
                   child: Column(
                     children: [
                       Image.asset(
-                        'assets/logo.png',
+                        'assets/logo-app.png',
                         width: 72,
                         height: 72,
                         fit: BoxFit.contain,

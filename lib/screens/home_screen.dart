@@ -231,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset('assets/logo.png', height: 30, fit: BoxFit.contain),
+            Image.asset('assets/logo-app.png', height: 30, fit: BoxFit.contain),
             const SizedBox(width: 10),
             const Text(
               'Kalender Indonesia',
