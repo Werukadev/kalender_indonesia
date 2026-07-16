@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
+import '../services/device_calendar_service.dart';
 import '../services/javanese_calendar_service.dart';
 
 class MonthCalendar extends StatelessWidget {
   final int year;
   final int month;
   final List<Holiday> holidays;
+  final List<DeviceCalendarEvent> deviceEvents;
   final DateTime? selectedDate;
   final ValueChanged<DateTime>? onDayTap;
 
@@ -16,6 +18,7 @@ class MonthCalendar extends StatelessWidget {
     required this.year,
     required this.month,
     required this.holidays,
+    this.deviceEvents = const [],
     this.selectedDate,
     this.onDayTap,
   });
@@ -31,6 +34,16 @@ class MonthCalendar extends StatelessWidget {
     return map;
   }
 
+  Map<int, int> _buildDeviceEventCountMap() {
+    final map = <int, int>{};
+    for (final e in deviceEvents) {
+      final start = e.startDateTime;
+      if (start == null || start.year != year || start.month != month) continue;
+      map[start.day] = (map[start.day] ?? 0) + 1;
+    }
+    return map;
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
@@ -38,6 +51,7 @@ class MonthCalendar extends StatelessWidget {
     final showJavanese = settings.showJavaneseCalendar;
     final showCellBorder = settings.showCellBorder;
     final holidayMap = _buildHolidayMap();
+    final deviceEventCountMap = _buildDeviceEventCountMap();
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final startOffset = (firstDay.weekday - 1) % 7;
@@ -108,6 +122,7 @@ class MonthCalendar extends StatelessWidget {
                 isToday: isToday,
                 isSelected: isSelected,
                 holidays: dayHolidays,
+                hasDeviceEvent: (deviceEventCountMap[day] ?? 0) > 0,
                 settingFontWeight: settings.resolvedFontWeight,
                 showJavanese: showJavanese,
                 showCellBorder: showCellBorder,
@@ -135,6 +150,7 @@ class _DayCell extends StatelessWidget {
   final bool isToday;
   final bool isSelected;
   final List<Holiday> holidays;
+  final bool hasDeviceEvent;
   final VoidCallback? onTap;
   final FontWeight settingFontWeight;
   final bool showJavanese;
@@ -147,6 +163,7 @@ class _DayCell extends StatelessWidget {
     required this.isToday,
     required this.isSelected,
     required this.holidays,
+    this.hasDeviceEvent = false,
     required this.settingFontWeight,
     required this.showJavanese,
     required this.showCellBorder,
@@ -157,6 +174,7 @@ class _DayCell extends StatelessWidget {
   static const _cutiColor = Color(0xFFF57C00);
   static const _hbnColor = Color(0xFF1565C0);
   static const _hbiColor = Color(0xFF7B1FA2);
+  static const _deviceEventColor = Color(0xFF00897B);
 
   @override
   Widget build(BuildContext context) {
@@ -260,6 +278,19 @@ class _DayCell extends StatelessWidget {
                         ),
                       ),
                   ],
+                ),
+              ),
+            if (hasDeviceEvent)
+              Positioned(
+                bottom: 3,
+                right: 4,
+                child: Container(
+                  width: 5,
+                  height: 5,
+                  decoration: const BoxDecoration(
+                    color: _deviceEventColor,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ],

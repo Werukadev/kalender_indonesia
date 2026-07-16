@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Device-calendar import: shows events from the device's synced
+         calendars (Google, Outlook, Samsung, etc.) alongside the app's own
+         holiday/hari-libur data from the cal.weruka.dev API. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <application
         android:label="Kalender Indonesia"
         android:name="${applicationName}"

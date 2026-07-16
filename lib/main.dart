@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
+import 'providers/device_calendar_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/app_timezone.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id', null);
+  // Fire-and-forget — must never delay the first frame. Anything reading
+  // device-calendar events awaits `AppTimezone.ready` first.
+  AppTimezone.initialize();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => SettingsProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => DeviceCalendarProvider()),
+      ],
       child: const KalenderIndonesiaApp(),
     ),
   );

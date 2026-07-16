@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Kalender Indonesia menampilkan event dari kalender perangkat Anda di dalam kalender.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Kalender Indonesia menampilkan event dari kalender perangkat Anda di dalam kalender.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

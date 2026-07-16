@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/holiday.dart';
+import '../providers/device_calendar_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
+import '../services/app_settings_launcher.dart';
+import '../services/device_calendar_service.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
 import 'settings_screen.dart';
@@ -19,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _api = ApiService();
   final _scrollController = ScrollController();
   late DateTime _currentMonth;
-  DateTime? _selectedDate;
+  late DateTime _selectedDate;
   List<Holiday>? _holidays;
   bool _isLoading = false;
   bool _isRefreshing = false;
@@ -33,7 +37,15 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month);
+    _selectedDate = DateTime(now.year, now.month, now.day);
     _loadHolidays();
+    _loadDeviceEvents();
+  }
+
+  void _loadDeviceEvents() {
+    context
+        .read<DeviceCalendarProvider>()
+        .loadMonth(_currentMonth.year, _currentMonth.month);
   }
 
   @override
@@ -44,13 +56,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onDayTap(DateTime date) {
     setState(() {
-      _selectedDate = (_selectedDate?.day == date.day &&
-              _selectedDate?.month == date.month &&
-              _selectedDate?.year == date.year)
-          ? null
-          : date;
+      _selectedDate = date;
     });
-    if (_selectedDate != null && _scrollController.hasClients) {
+    if (_scrollController.hasClients) {
       Future.delayed(const Duration(milliseconds: 50), () {
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
@@ -61,6 +69,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
     }
+  }
+
+  /// Keeps the selected day-of-month when switching months, clamped to the
+  /// new month's day count (e.g. selecting the 31st then moving to Feb).
+  void _carrySelectedDateToMonth(DateTime newMonth) {
+    final daysInNewMonth = DateTime(newMonth.year, newMonth.month + 1, 0).day;
+    final day = _selectedDate.day.clamp(1, daysInNewMonth);
+    _selectedDate = DateTime(newMonth.year, newMonth.month, day);
   }
 
   Future<void> _loadHolidays() async {
@@ -124,17 +140,21 @@ class _HomeScreenState extends State<HomeScreen> {
   void _prevMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
+      _carrySelectedDateToMonth(_currentMonth);
       _resetMonthState();
     });
     _loadHolidays();
+    _loadDeviceEvents();
   }
 
   void _nextMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+      _carrySelectedDateToMonth(_currentMonth);
       _resetMonthState();
     });
     _loadHolidays();
+    _loadDeviceEvents();
   }
 
   void _goToToday() {
@@ -143,9 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (today != _currentMonth) {
       setState(() {
         _currentMonth = today;
+        _selectedDate = DateTime(now.year, now.month, now.day);
         _resetMonthState();
       });
       _loadHolidays();
+      _loadDeviceEvents();
+    } else {
+      setState(() => _selectedDate = DateTime(now.year, now.month, now.day));
     }
   }
 
@@ -226,9 +250,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selected != null && selected != currentYear) {
       setState(() {
         _currentMonth = DateTime(selected, _currentMonth.month);
+        _carrySelectedDateToMonth(_currentMonth);
         _resetMonthState();
       });
       _loadHolidays();
+      _loadDeviceEvents();
     }
   }
 
@@ -239,85 +265,66 @@ class _HomeScreenState extends State<HomeScreen> {
     final filteredHolidays = (_holidays ?? [])
         .where((h) => settings.isTypeVisible(h.type))
         .toList();
+    final deviceCalendar = context.watch<DeviceCalendarProvider>();
+    final deviceEvents =
+        deviceCalendar.eventsFor(_currentMonth.year, _currentMonth.month);
+    // Only an explicit `false` should show the banner — while null (still
+    // resolving, or never requested yet), it's usually just a split-second
+    // permission lookup, not a genuine denial.
+    final calendarPermissionDenied = deviceCalendar.permissionGranted == false;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: preset.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        leading: IconButton(
-          icon: const Icon(Icons.settings_outlined),
-          tooltip: 'Pengaturan',
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          ),
-        ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset('assets/logo-app.png', height: 30, fit: BoxFit.contain),
-            const SizedBox(width: 10),
-            const Text(
-              'Kalender Indonesia',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-        centerTitle: true,
-        actions: [
-          if (_isRefreshing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white60),
-                ),
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.today_outlined),
-            tooltip: 'Hari Ini',
-            onPressed: _goToToday,
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
-      body: GestureDetector(
-        onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
-        onHorizontalDragEnd: (d) {
-          final dx = d.globalPosition.dx - _dragStartX;
-          if (dx < -50) _nextMonth();
-          if (dx > 50) _prevMonth();
-        },
-        child: _buildBody(preset.headerColor, filteredHolidays),
+      child: Scaffold(
+        body: GestureDetector(
+          onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
+          onHorizontalDragEnd: (d) {
+            final dx = d.globalPosition.dx - _dragStartX;
+            if (dx < -50) _nextMonth();
+            if (dx > 50) _prevMonth();
+          },
+          child: _buildBody(
+            preset.primaryColor,
+            filteredHolidays,
+            deviceEvents,
+            calendarPermissionDenied,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildBody(Color headerColor, List<Holiday> holidays) {
+  Widget _buildBody(
+    Color headerColor,
+    List<Holiday> holidays,
+    List<DeviceCalendarEvent> deviceEvents,
+    bool calendarPermissionDenied,
+  ) {
     final size = MediaQuery.of(context).size;
     final isTabletLandscape =
         size.shortestSide >= 600 && size.width > size.height;
 
     final header = _MonthHeader(
       currentMonth: _currentMonth,
-      onPrev: _prevMonth,
-      onNext: _nextMonth,
+      onSettingsTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      ),
+      onTodayTap: _goToToday,
       onYearTap: () => _selectYear(context),
       headerColor: headerColor,
+      isRefreshing: _isRefreshing,
     );
 
     final calendar = MonthCalendar(
       year: _currentMonth.year,
       month: _currentMonth.month,
       holidays: holidays,
+      deviceEvents: deviceEvents,
       selectedDate: _selectedDate,
       onDayTap: _onDayTap,
     );
@@ -327,12 +334,25 @@ class _HomeScreenState extends State<HomeScreen> {
         ? const _HolidayLoadingCard()
         : _error != null
             ? _HolidayErrorCard(onRetry: _loadHolidays)
-            : EventList(holidays: holidays, selectedDate: _selectedDate);
+            : EventList(
+                holidays: holidays,
+                deviceEvents: deviceEvents,
+                selectedDate: _selectedDate,
+              );
+
+    final permissionBanner = calendarPermissionDenied
+        ? _CalendarPermissionBanner(
+            onRefresh: () => context
+                .read<DeviceCalendarProvider>()
+                .refresh(_currentMonth.year, _currentMonth.month),
+          )
+        : null;
 
     if (isTabletLandscape) {
       return Column(
         children: [
           header,
+          ?permissionBanner,
           if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
           Expanded(
             child: Row(
@@ -373,10 +393,49 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           header,
+          ?permissionBanner,
           if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
           calendar,
           holidaySection,
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarPermissionBanner extends StatelessWidget {
+  const _CalendarPermissionBanner({required this.onRefresh});
+
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      color: Colors.red.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          Icon(Icons.event_busy, color: Colors.red.shade700, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Izin kalender ditolak — event dari kalender perangkat tidak ditampilkan.',
+              style: TextStyle(fontSize: 12.5),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await openAppSettings();
+              onRefresh();
+            },
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Pengaturan', style: TextStyle(fontSize: 12.5)),
+          ),
         ],
       ),
     );
@@ -530,58 +589,87 @@ class _HolidayErrorCard extends StatelessWidget {
 
 class _MonthHeader extends StatelessWidget {
   final DateTime currentMonth;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
+  final VoidCallback onSettingsTap;
+  final VoidCallback onTodayTap;
   final VoidCallback onYearTap;
   final Color headerColor;
+  final bool isRefreshing;
 
   const _MonthHeader({
     required this.currentMonth,
-    required this.onPrev,
-    required this.onNext,
+    required this.onSettingsTap,
+    required this.onTodayTap,
     required this.onYearTap,
     required this.headerColor,
+    this.isRefreshing = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final monthName = DateFormat('MMMM yyyy', 'id').format(currentMonth);
+    // Container paints the color behind the status bar too (edge-to-edge,
+    // no separate AppBar); SafeArea only pads the row content below it.
     return Container(
       color: headerColor,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left, color: Colors.white, size: 28),
-            onPressed: onPrev,
-            splashRadius: 20,
-          ),
-          GestureDetector(
-            onTap: onYearTap,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  monthName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, color: Colors.white),
+                tooltip: 'Pengaturan',
+                onPressed: onSettingsTap,
+                splashRadius: 20,
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onYearTap,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        monthName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 4),
-                const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
-              ],
-            ),
+              ),
+              if (isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white60),
+                    ),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.today_outlined, color: Colors.white),
+                tooltip: 'Hari Ini',
+                onPressed: onTodayTap,
+                splashRadius: 20,
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right, color: Colors.white, size: 28),
-            onPressed: onNext,
-            splashRadius: 20,
-          ),
-        ],
+        ),
       ),
     );
   }
