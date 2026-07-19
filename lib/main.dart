@@ -29,12 +29,14 @@ class KalenderIndonesiaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final seedColor = settings.selectedPreset.primaryColor;
+    final preset = settings.selectedPreset;
+    final seedColor = preset.primaryColor;
 
     return MaterialApp(
       title: 'Kalender Indonesia',
       debugShowCheckedModeBanner: false,
-      themeMode: settings.themeMode,
+      // A dark preset forces dark mode regardless of the display-mode setting.
+      themeMode: preset.isDark ? ThemeMode.dark : settings.themeMode,
       theme: _buildTheme(Brightness.light, seedColor),
       darkTheme: _buildTheme(Brightness.dark, seedColor),
       builder: (context, child) {

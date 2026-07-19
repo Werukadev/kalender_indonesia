@@ -5,6 +5,9 @@ import '../providers/settings_provider.dart';
 import '../services/device_calendar_service.dart';
 import '../services/javanese_calendar_service.dart';
 
+/// Samsung-Calendar-style month grid: week rows stretch to fill the
+/// available height, so this widget must be given bounded height
+/// (e.g. wrapped in an [Expanded]).
 class MonthCalendar extends StatelessWidget {
   final int year;
   final int month;
@@ -22,6 +25,9 @@ class MonthCalendar extends StatelessWidget {
     this.selectedDate,
     this.onDayTap,
   });
+
+  static const _saturdayColor = Color(0xFF1E6FD9);
+  static const _sundayColor = Color(0xFFE53935);
 
   Map<int, List<Holiday>> _buildHolidayMap() {
     final map = <int, List<Holiday>>{};
@@ -55,83 +61,95 @@ class MonthCalendar extends StatelessWidget {
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final startOffset = (firstDay.weekday - 1) % 7;
+    final totalCells = startOffset + daysInMonth;
+    final rowCount = (totalCells / 7).ceil();
 
     const weekDayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-      padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
             children: List.generate(7, (i) {
-              final isWeekend = i >= 5;
+              final Color labelColor;
+              if (i == 6) {
+                labelColor = _sundayColor;
+              } else if (i == 5) {
+                labelColor = _saturdayColor;
+              } else {
+                labelColor = colorScheme.onSurface.withValues(alpha: 0.5);
+              }
               return Expanded(
                 child: Center(
                   child: Text(
                     weekDayLabels[i],
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: isWeekend
-                          ? Colors.red.shade600
-                          : colorScheme.onSurface.withValues(alpha: 0.5),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      color: labelColor,
                     ),
                   ),
                 ),
               );
             }),
           ),
-          const Divider(height: 10, thickness: 0.5),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              childAspectRatio: 0.9,
-            ),
-            itemCount: startOffset + daysInMonth,
-            itemBuilder: (context, index) {
-              if (index < startOffset) return const SizedBox.shrink();
+        ),
+        Divider(
+          height: 1,
+          thickness: 0.5,
+          color: colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final cellWidth = constraints.maxWidth / 7;
+              final cellHeight = constraints.maxHeight / rowCount;
+              return GridView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  childAspectRatio: cellWidth / cellHeight,
+                ),
+                itemCount: rowCount * 7,
+                itemBuilder: (context, index) {
+                  // DateTime normalizes out-of-range days, so day 0 becomes
+                  // the last day of the previous month and day 32 rolls into
+                  // the next month — giving us the gray outside dates.
+                  final date = DateTime(year, month, index - startOffset + 1);
+                  final isOutside = date.month != month;
+                  final day = date.day;
+                  final dayHolidays =
+                      isOutside ? const <Holiday>[] : holidayMap[day] ?? [];
+                  final isToday = !isOutside && _isToday(date);
+                  final isSelected = !isOutside &&
+                      selectedDate != null &&
+                      selectedDate!.year == year &&
+                      selectedDate!.month == month &&
+                      selectedDate!.day == day;
 
-              final day = index - startOffset + 1;
-              final date = DateTime(year, month, day);
-              final dayHolidays = holidayMap[day] ?? [];
-              final isWeekend = date.weekday >= 6;
-              final isToday = _isToday(date);
-              final isSelected = selectedDate != null &&
-                  selectedDate!.year == year &&
-                  selectedDate!.month == month &&
-                  selectedDate!.day == day;
-
-              return _DayCell(
-                day: day,
-                date: date,
-                isWeekend: isWeekend,
-                isToday: isToday,
-                isSelected: isSelected,
-                holidays: dayHolidays,
-                hasDeviceEvent: (deviceEventCountMap[day] ?? 0) > 0,
-                settingFontWeight: settings.resolvedFontWeight,
-                showJavanese: showJavanese,
-                showCellBorder: showCellBorder,
-                onTap: () => onDayTap?.call(date),
+                  return _DayCell(
+                    day: day,
+                    date: date,
+                    isToday: isToday,
+                    isSelected: isSelected,
+                    isOutside: isOutside,
+                    holidays: dayHolidays,
+                    hasDeviceEvent: !isOutside &&
+                        (deviceEventCountMap[day] ?? 0) > 0,
+                    settingFontWeight: settings.resolvedFontWeight,
+                    showJavanese: showJavanese,
+                    showCellBorder: showCellBorder,
+                    onTap: () => onDayTap?.call(date),
+                  );
+                },
               );
             },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -146,9 +164,9 @@ class MonthCalendar extends StatelessWidget {
 class _DayCell extends StatelessWidget {
   final int day;
   final DateTime date;
-  final bool isWeekend;
   final bool isToday;
   final bool isSelected;
+  final bool isOutside;
   final List<Holiday> holidays;
   final bool hasDeviceEvent;
   final VoidCallback? onTap;
@@ -159,9 +177,9 @@ class _DayCell extends StatelessWidget {
   const _DayCell({
     required this.day,
     required this.date,
-    required this.isWeekend,
     required this.isToday,
     required this.isSelected,
+    this.isOutside = false,
     required this.holidays,
     this.hasDeviceEvent = false,
     required this.settingFontWeight,
@@ -175,6 +193,7 @@ class _DayCell extends StatelessWidget {
   static const _hbnColor = Color(0xFF1565C0);
   static const _hbiColor = Color(0xFF7B1FA2);
   static const _deviceEventColor = Color(0xFF00897B);
+  static const _saturdayColor = Color(0xFF1E6FD9);
 
   @override
   Widget build(BuildContext context) {
@@ -184,12 +203,18 @@ class _DayCell extends StatelessWidget {
     final hasHBN = holidays.any((h) => h.type == HolidayType.hariBesarNasional);
     final hasHBI =
         holidays.any((h) => h.type == HolidayType.hariBesarInternasional);
+    final isSunday = date.weekday == DateTime.sunday;
+    final isSaturday = date.weekday == DateTime.saturday;
 
     Color textColor;
-    if (hasLibur || isWeekend) {
+    if (isOutside) {
+      textColor = colorScheme.onSurface.withValues(alpha: 0.25);
+    } else if (hasLibur || isSunday) {
       textColor = _liburColor;
     } else if (hasCuti) {
       textColor = _cutiColor;
+    } else if (isSaturday) {
+      textColor = _saturdayColor;
     } else {
       textColor = colorScheme.onSurface;
     }
@@ -200,102 +225,99 @@ class _DayCell extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? colorScheme.primary.withValues(alpha: 0.15)
-              : null,
-          borderRadius: BorderRadius.circular(7),
-          border: isToday
-              ? Border.all(color: colorScheme.primary, width: 2)
-              : isSelected
-                  ? Border.all(
-                      color: colorScheme.primary.withValues(alpha: 0.5),
-                      width: 1.5,
-                    )
-                  : showCellBorder
-                      ? Border.all(
-                          color: colorScheme.onSurface.withValues(alpha: 0.1),
-                          width: 0.5,
-                        )
-                      : null,
-        ),
+        decoration: showCellBorder
+            ? BoxDecoration(
+                border: Border.all(
+                  color: colorScheme.onSurface.withValues(alpha: 0.06),
+                  width: 0.5,
+                ),
+              )
+            : null,
         child: Stack(
           children: [
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '$day',
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: fontWeight,
-                      fontSize: 13,
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: isToday
+                        ? BoxDecoration(
+                            color: colorScheme.primary,
+                            shape: BoxShape.circle,
+                          )
+                        : isSelected
+                            ? BoxDecoration(
+                                color: colorScheme.primary
+                                    .withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              )
+                            : null,
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        color: isToday ? Colors.white : textColor,
+                        fontWeight: fontWeight,
+                        fontSize: 13,
+                        height: 1.0,
+                      ),
                     ),
                   ),
                   if (showJavanese)
-                    Text(
-                      getPasaran(date).toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w500,
-                        color: textColor.withValues(alpha: 0.7),
-                        height: 1.1,
-                        letterSpacing: 0,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        getPasaran(date).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w500,
+                          color: textColor.withValues(alpha: 0.7),
+                          height: 1.0,
+                          letterSpacing: 0,
+                        ),
+                        overflow: TextOverflow.clip,
                       ),
-                      overflow: TextOverflow.clip,
                     ),
                 ],
               ),
             ),
-            if (hasHBN || hasHBI)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasHBN)
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(left: 1),
-                        decoration: const BoxDecoration(
-                          color: _hbnColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    if (hasHBI)
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(left: 1),
-                        decoration: const BoxDecoration(
-                          color: _hbiColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            if (hasDeviceEvent)
+            if (hasHBN || hasHBI || hasDeviceEvent)
               Positioned(
                 bottom: 3,
-                right: 4,
-                child: Container(
-                  width: 5,
-                  height: 5,
-                  decoration: const BoxDecoration(
-                    color: _deviceEventColor,
-                    shape: BoxShape.circle,
-                  ),
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (hasHBN) const _EventDot(_hbnColor),
+                    if (hasHBI) const _EventDot(_hbiColor),
+                    if (hasDeviceEvent) const _EventDot(_deviceEventColor),
+                  ],
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EventDot extends StatelessWidget {
+  final Color color;
+
+  const _EventDot(this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 5,
+      height: 5,
+      margin: const EdgeInsets.symmetric(horizontal: 1),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }

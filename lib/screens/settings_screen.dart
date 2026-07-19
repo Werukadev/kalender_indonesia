@@ -4,6 +4,8 @@ import '../data/theme_presets.dart';
 import '../models/holiday.dart';
 import '../models/theme_preset.dart';
 import '../providers/settings_provider.dart';
+import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/about_app_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -68,25 +70,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _sectionLabel('TEMA APLIKASI'),
-          _SettingsCard(
-            children: [
-              for (int i = 0; i < kThemePresets.length; i++) ...[
-                if (i > 0)
-                  Divider(
-                    height: 1,
-                    thickness: 0.5,
-                    indent: 16,
-                    endIndent: 16,
-                    color: colorScheme.onSurface.withValues(alpha: 0.08),
-                  ),
-                _ThemePresetTile(
-                  preset: kThemePresets[i],
-                  isSelected: settings.selectedThemeId == kThemePresets[i].id,
-                  onTap: () => settings.setThemePreset(kThemePresets[i].id),
-                ),
-              ],
-            ],
-          ),
+          _ThemePreviewPager(settings: settings),
           const SizedBox(height: 20),
           _sectionLabel('TAMPILKAN JENIS'),
           _SettingsCard(
@@ -108,6 +92,16 @@ class SettingsScreen extends StatelessWidget {
                   onToggle: () => settings.toggleHolidayType(HolidayType.values[i]),
                 ),
               ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          _sectionLabel('NOTIFIKASI'),
+          _SettingsCard(
+            children: [
+              _NotificationToggle(
+                isEnabled: settings.notificationsEnabled,
+                onToggle: () => _toggleNotifications(context, settings),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -189,13 +183,42 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          _sectionLabel('PRATINJAU'),
-          _PreviewCard(settings: settings, preset: preset),
           const SizedBox(height: 8),
         ],
       ),
     );
+  }
+
+  Future<void> _toggleNotifications(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final enabling = !settings.notificationsEnabled;
+    if (enabling) {
+      final granted = await NotificationService.requestPermission();
+      if (!granted) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Izin notifikasi ditolak — aktifkan lewat pengaturan sistem.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      await settings.setNotificationsEnabled(true);
+      // Fire-and-forget: builds the schedule for current + next month.
+      NotificationService.resync(
+        ApiService(),
+        enabled: true,
+        visibleTypes: settings.visibleTypes,
+      );
+    } else {
+      await settings.setNotificationsEnabled(false);
+      await NotificationService.cancelAll();
+    }
   }
 
   Widget _sectionLabel(String text) {
@@ -214,164 +237,107 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// ── Theme Preset Tile ──────────────────────────────────────────────────────────
+// ── Theme Preview Pager ────────────────────────────────────────────────────────
 
-class _ThemePresetTile extends StatelessWidget {
-  final ThemePreset preset;
-  final bool isSelected;
-  final VoidCallback onTap;
+/// Swipeable, live theme picker: each page previews one preset; settling on
+/// a page applies that theme immediately.
+class _ThemePreviewPager extends StatefulWidget {
+  final SettingsProvider settings;
 
-  const _ThemePresetTile({
-    required this.preset,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _ThemePreviewPager({required this.settings});
+
+  @override
+  State<_ThemePreviewPager> createState() => _ThemePreviewPagerState();
+}
+
+class _ThemePreviewPagerState extends State<_ThemePreviewPager> {
+  late final PageController _controller;
+  late int _page;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = kThemePresets
+        .indexWhere((p) => p.id == widget.settings.selectedThemeId);
+    _page = initial < 0 ? 0 : initial;
+    _controller = PageController(
+      viewportFraction: 0.86,
+      initialPage: _page,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPageChanged(int i) {
+    setState(() => _page = i);
+    widget.settings.setThemePreset(kThemePresets[i].id);
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final activeColor = kThemePresets[_page].primaryColor;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        child: Row(
-          children: [
-            _ThemeColorPreview(preset: preset, isSelected: isSelected),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    preset.name,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected
-                          ? preset.primaryColor
-                          : colorScheme.onSurface,
-                    ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 210,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: kThemePresets.length,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (context, i) {
+              final preset = kThemePresets[i];
+              final isSelected =
+                  preset.id == widget.settings.selectedThemeId;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: GestureDetector(
+                  onTap: () {
+                    _controller.animateToPage(
+                      i,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: _PreviewCard(
+                    settings: widget.settings,
+                    preset: preset,
+                    isSelected: isSelected,
                   ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      _ColorChip(
-                        color: preset.primaryColor,
-                        label: 'AppBar',
-                        colorScheme: colorScheme,
-                      ),
-                      const SizedBox(width: 6),
-                      _ColorChip(
-                        color: preset.headerColor,
-                        label: 'Header',
-                        colorScheme: colorScheme,
-                      ),
-                      const SizedBox(width: 6),
-                      _ColorChip(
-                        color: preset.accentColor,
-                        label: 'Aksen',
-                        colorScheme: colorScheme,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: isSelected
-                  ? Icon(
-                      Icons.check_circle_rounded,
-                      key: const ValueKey(true),
-                      color: preset.primaryColor,
-                      size: 22,
-                    )
-                  : Icon(
-                      Icons.radio_button_unchecked,
-                      key: const ValueKey(false),
-                      color: colorScheme.onSurface.withValues(alpha: 0.2),
-                      size: 22,
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeColorPreview extends StatelessWidget {
-  final ThemePreset preset;
-  final bool isSelected;
-
-  const _ThemeColorPreview({required this.preset, required this.isSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: isSelected
-              ? preset.primaryColor
-              : Colors.black.withValues(alpha: 0.1),
-          width: isSelected ? 2 : 0.5,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(7.5),
-        child: SizedBox(
-          width: 52,
-          height: 40,
-          child: Column(
-            children: [
-              // AppBar layer
-              Container(height: 14, color: preset.primaryColor),
-              // Header layer
-              Container(height: 10, color: preset.headerColor),
-              // Accent layer
-              Expanded(child: ColoredBox(color: preset.accentColor)),
-            ],
+                ),
+              );
+            },
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ColorChip extends StatelessWidget {
-  final Color color;
-  final String label;
-  final ColorScheme colorScheme;
-
-  const _ColorChip({
-    required this.color,
-    required this.label,
-    required this.colorScheme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(kThemePresets.length, (i) {
+            final isActive = i == _page;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: isActive ? 16 : 6,
+              height: 6,
+              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? activeColor
+                    : colorScheme.onSurface.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
         ),
-        const SizedBox(width: 3),
+        const SizedBox(height: 6),
         Text(
-          label,
+          'Geser pratinjau untuk mengganti tema',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             color: colorScheme.onSurface.withValues(alpha: 0.45),
           ),
         ),
@@ -539,6 +505,77 @@ class _CellBorderToggle extends StatelessWidget {
   }
 }
 
+// ── Notification Toggle ────────────────────────────────────────────────────────
+
+class _NotificationToggle extends StatelessWidget {
+  final bool isEnabled;
+  final VoidCallback onToggle;
+
+  const _NotificationToggle({
+    required this.isEnabled,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 11, 12, 11),
+        child: Row(
+          children: [
+            Icon(
+              Icons.notifications_active_outlined,
+              size: 20,
+              color: isEnabled
+                  ? colorScheme.primary
+                  : colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pengingat Hari Penting',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isEnabled
+                          ? colorScheme.onSurface
+                          : colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Notifikasi lewat tengah malam pada tanggal hari libur '
+                    'dan hari besar',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurface.withValues(
+                        alpha: isEnabled ? 0.45 : 0.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: isEnabled,
+              onChanged: (_) => onToggle(),
+              activeThumbColor: Colors.white,
+              activeTrackColor: colorScheme.primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Javanese Calendar Toggle ───────────────────────────────────────────────────
 
 class _JavaneseCalendarToggle extends StatelessWidget {
@@ -616,106 +653,148 @@ class _JavaneseCalendarToggle extends StatelessWidget {
 class _PreviewCard extends StatelessWidget {
   final SettingsProvider settings;
   final ThemePreset preset;
+  final bool isSelected;
 
-  const _PreviewCard({required this.settings, required this.preset});
+  const _PreviewCard({
+    required this.settings,
+    required this.preset,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final fw = settings.resolvedFontWeight;
+    // Dark presets preview on a dark surface even while the app is light.
+    final surfaceColor =
+        preset.isDark ? const Color(0xFF1C2027) : colorScheme.surface;
+    final onSurface =
+        preset.isDark ? Colors.white : colorScheme.onSurface;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 1,
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Mini AppBar
-          Container(
-            color: preset.primaryColor,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              'Kalender Indonesia',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          // Mini Month Header
-          Container(
-            color: preset.headerColor,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(Icons.chevron_left, color: Colors.white, size: 18),
-                Text(
-                  'Juni 2026',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: Colors.white, size: 18),
-              ],
-            ),
-          ),
-          // Content preview
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hari libur nasional & cuti bersama',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: fw == FontWeight.bold ? FontWeight.bold : FontWeight.w500,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Pratinjau tampilan teks dengan ukuran dan ketebalan yang dipilih.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: fw,
-                    color: colorScheme.onSurface.withValues(alpha: 0.65),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected
+              ? preset.primaryColor
+              : colorScheme.onSurface.withValues(alpha: 0.1),
+          width: isSelected ? 2 : 0.5,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12.5),
+        child: ColoredBox(
+          color: surfaceColor,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Mini AppBar
+              Container(
+                color: preset.primaryColor,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
                   children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: BoxDecoration(
-                        color: preset.accentColor,
-                        shape: BoxShape.circle,
+                    Expanded(
+                      child: Text(
+                        preset.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(
-                      'Warna aksen tema',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: fw,
-                        color: colorScheme.onSurface.withValues(alpha: 0.5),
+                    if (isSelected)
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.white,
+                        size: 16,
                       ),
-                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              // Mini Month Header
+              Container(
+                color: preset.headerColor,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Icon(Icons.chevron_left, color: Colors.white, size: 18),
+                    Text(
+                      'Juli 2026',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.white, size: 18),
+                  ],
+                ),
+              ),
+              // Content preview
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hari libur nasional & cuti bersama',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: fw == FontWeight.bold
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pratinjau tampilan teks dengan ukuran dan '
+                        'ketebalan yang dipilih.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: fw,
+                          color: onSurface.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: preset.accentColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Text(
+                            preset.isDark
+                                ? 'Tema gelap · warna aksen'
+                                : 'Warna aksen tema',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: fw,
+                              color: onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

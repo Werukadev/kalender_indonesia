@@ -16,6 +16,7 @@ class SettingsProvider extends ChangeNotifier {
   Set<HolidayType> _visibleTypes = HolidayType.values.toSet();
   bool _showJavaneseCalendar = false;
   bool _showCellBorder = true;
+  bool _notificationsEnabled = true;
 
   ThemeMode get themeMode => _themeMode;
   AppTextSize get textSize => _textSize;
@@ -24,6 +25,7 @@ class SettingsProvider extends ChangeNotifier {
   Set<HolidayType> get visibleTypes => Set.unmodifiable(_visibleTypes);
   bool get showJavaneseCalendar => _showJavaneseCalendar;
   bool get showCellBorder => _showCellBorder;
+  bool get notificationsEnabled => _notificationsEnabled;
 
   ThemePreset get selectedPreset => kThemePresets.firstWhere(
         (p) => p.id == _selectedThemeId,
@@ -64,8 +66,17 @@ class SettingsProvider extends ChangeNotifier {
     _visibleTypes = _bitmaskToTypes(vm);
     _showJavaneseCalendar = prefs.getBool('showJavanese') ?? false;
     _showCellBorder = prefs.getBool('showCellBorder') ?? true;
+    _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
 
     notifyListeners();
+  }
+
+  Future<void> setNotificationsEnabled(bool value) async {
+    if (_notificationsEnabled == value) return;
+    _notificationsEnabled = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('notificationsEnabled', value);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

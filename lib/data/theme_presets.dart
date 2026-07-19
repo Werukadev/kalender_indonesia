@@ -58,4 +58,12 @@ const List<ThemePreset> kThemePresets = [
     headerColor: Color(0xFFC0A27A),
     accentColor: Color(0xFFE2D0B5),
   ),
+  ThemePreset(
+    id: 'midnight_dark',
+    name: 'Midnight Dark',
+    primaryColor: Color(0xFF232936),
+    headerColor: Color(0xFF303948),
+    accentColor: Color(0xFF7FB5B5),
+    isDark: true,
+  ),
 ];

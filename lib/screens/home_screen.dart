@@ -8,6 +8,7 @@ import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
 import '../services/app_settings_launcher.dart';
 import '../services/device_calendar_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
 import 'settings_screen.dart';
@@ -30,7 +31,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool _isOfflineCache = false;
   DateTime? _cacheTimestamp;
-  double _dragStartX = 0;
+  double _calendarDragStartX = 0;
+  double _listDragStartX = 0;
 
   @override
   void initState() {
@@ -40,6 +42,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedDate = DateTime(now.year, now.month, now.day);
     _loadHolidays();
     _loadDeviceEvents();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncNotifications());
+  }
+
+  /// Once per app open: (re)schedules the midnight holiday notifications for
+  /// the current + next month. Fire-and-forget — failures just mean the
+  /// schedule from the previous run stays in place.
+  Future<void> _syncNotifications() async {
+    final settings = context.read<SettingsProvider>();
+    if (!settings.notificationsEnabled) return;
+    final granted = await NotificationService.requestPermission();
+    if (!granted) return;
+    NotificationService.resync(
+      _api,
+      enabled: true,
+      visibleTypes: settings.visibleTypes,
+    );
   }
 
   void _loadDeviceEvents() {
@@ -55,19 +73,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onDayTap(DateTime date) {
+    // Gray outside dates belong to the previous/next month — jump there.
+    final monthChanged = date.year != _currentMonth.year ||
+        date.month != _currentMonth.month;
     setState(() {
       _selectedDate = date;
+      if (monthChanged) {
+        _currentMonth = DateTime(date.year, date.month);
+        _resetMonthState();
+      }
     });
+    if (monthChanged) {
+      _loadHolidays();
+      _loadDeviceEvents();
+    }
+    // Snap the agenda list back to the top for the newly selected day.
     if (_scrollController.hasClients) {
-      Future.delayed(const Duration(milliseconds: 50), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      _scrollController.jumpTo(0);
     }
   }
 
@@ -155,6 +177,26 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _loadHolidays();
     _loadDeviceEvents();
+  }
+
+  /// Moves the selected day by [delta] days, crossing into the next/previous
+  /// month (and reloading its data) when the shift lands outside the month
+  /// currently on screen.
+  void _shiftSelectedDay(int delta) {
+    final newDate = _selectedDate.add(Duration(days: delta));
+    final monthChanged = newDate.year != _currentMonth.year ||
+        newDate.month != _currentMonth.month;
+    setState(() {
+      _selectedDate = newDate;
+      if (monthChanged) {
+        _currentMonth = DateTime(newDate.year, newDate.month);
+        _resetMonthState();
+      }
+    });
+    if (monthChanged) {
+      _loadHolidays();
+      _loadDeviceEvents();
+    }
   }
 
   void _goToToday() {
@@ -280,21 +322,40 @@ class _HomeScreenState extends State<HomeScreen> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        body: GestureDetector(
-          onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
-          onHorizontalDragEnd: (d) {
-            final dx = d.globalPosition.dx - _dragStartX;
-            if (dx < -50) _nextMonth();
-            if (dx > 50) _prevMonth();
-          },
-          child: _buildBody(
-            preset.primaryColor,
-            filteredHolidays,
-            deviceEvents,
-            calendarPermissionDenied,
-          ),
+        body: _buildBody(
+          preset.primaryColor,
+          filteredHolidays,
+          deviceEvents,
+          calendarPermissionDenied,
         ),
       ),
+    );
+  }
+
+  Widget _withCalendarSwipe(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (d) =>
+          _calendarDragStartX = d.globalPosition.dx,
+      onHorizontalDragEnd: (d) {
+        final dx = d.globalPosition.dx - _calendarDragStartX;
+        if (dx < -50) _nextMonth();
+        if (dx > 50) _prevMonth();
+      },
+      child: child,
+    );
+  }
+
+  Widget _withListSwipe(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (d) => _listDragStartX = d.globalPosition.dx,
+      onHorizontalDragEnd: (d) {
+        final dx = d.globalPosition.dx - _listDragStartX;
+        if (dx < -50) _shiftSelectedDay(1);
+        if (dx > 50) _shiftSelectedDay(-1);
+      },
+      child: child,
     );
   }
 
@@ -320,13 +381,15 @@ class _HomeScreenState extends State<HomeScreen> {
       isRefreshing: _isRefreshing,
     );
 
-    final calendar = MonthCalendar(
-      year: _currentMonth.year,
-      month: _currentMonth.month,
-      holidays: holidays,
-      deviceEvents: deviceEvents,
-      selectedDate: _selectedDate,
-      onDayTap: _onDayTap,
+    final calendar = _withCalendarSwipe(
+      MonthCalendar(
+        year: _currentMonth.year,
+        month: _currentMonth.month,
+        holidays: holidays,
+        deviceEvents: deviceEvents,
+        selectedDate: _selectedDate,
+        onDayTap: _onDayTap,
+      ),
     );
 
     // Holiday area: loading card / error card / event list
@@ -348,6 +411,12 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         : null;
 
+    final divider = Divider(
+      height: 1,
+      thickness: 0.5,
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+    );
+
     if (isTabletLandscape) {
       return Column(
         children: [
@@ -356,15 +425,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
           Expanded(
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 5,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: calendar,
-                  ),
-                ),
+                Expanded(flex: 5, child: calendar),
                 VerticalDivider(
                   width: 1,
                   thickness: 0.5,
@@ -375,9 +437,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 Expanded(
                   flex: 4,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: holidaySection,
+                  child: _withListSwipe(
+                    SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: holidaySection,
+                    ),
                   ),
                 ),
               ],
@@ -387,19 +452,27 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      physics: const ClampingScrollPhysics(),
-      child: Column(
-        children: [
-          header,
-          ?permissionBanner,
-          if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
-          calendar,
-          holidaySection,
-          const SizedBox(height: 24),
-        ],
-      ),
+    // Samsung-Calendar-like layout: the month grid fills the upper part of
+    // the screen, the selected day's agenda sits below a thin divider.
+    return Column(
+      children: [
+        header,
+        ?permissionBanner,
+        if (_isOfflineCache) _OfflineBanner(cachedAt: _cacheTimestamp),
+        Expanded(flex: 11, child: calendar),
+        divider,
+        Expanded(
+          flex: 9,
+          child: _withListSwipe(
+            SingleChildScrollView(
+              controller: _scrollController,
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 16),
+              child: holidaySection,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -493,20 +566,8 @@ class _HolidayLoadingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -542,20 +603,8 @@ class _HolidayErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+    return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Row(
         children: [
           Icon(

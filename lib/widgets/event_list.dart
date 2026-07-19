@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
 import '../services/device_calendar_service.dart';
@@ -82,19 +87,8 @@ class EventList extends StatelessWidget {
     final entries = _entriesForDay();
     final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(selectedDate);
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -166,6 +160,7 @@ class _Entry {
   final bool isAllDay;
   final String? location;
   final String? description;
+  final String? imageUrl;
   final DateTime? startDateTime;
   final DateTime? endDateTime;
 
@@ -179,6 +174,7 @@ class _Entry {
     this.sortMinutes,
     this.location,
     this.description,
+    this.imageUrl,
     this.startDateTime,
     this.endDateTime,
   });
@@ -189,6 +185,8 @@ class _Entry {
       color: color,
       sourceLabel: h.type.label,
       isAllDay: true,
+      description: h.description,
+      imageUrl: h.imageUrl,
       startDateTime: h.date,
     );
   }
@@ -294,11 +292,20 @@ class _EventTile extends StatelessWidget {
 
 /// Bottom-sheet detail view for one event — works for both a holiday from
 /// the cal.weruka.dev API and an event synced from the device calendar.
-class _EventDetailSheet extends StatelessWidget {
+class _EventDetailSheet extends StatefulWidget {
   final _Entry entry;
   final DateTime day;
 
   const _EventDetailSheet({required this.entry, required this.day});
+
+  @override
+  State<_EventDetailSheet> createState() => _EventDetailSheetState();
+}
+
+class _EventDetailSheetState extends State<_EventDetailSheet> {
+  bool _isSharing = false;
+
+  _Entry get entry => widget.entry;
 
   String _timeRangeLabel() {
     if (entry.isAllDay) return 'Sepanjang hari';
@@ -311,10 +318,63 @@ class _EventDetailSheet extends StatelessWidget {
     return '$startStr – $endStr';
   }
 
+  String _shareText() {
+    final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(widget.day);
+    final desc = entry.description?.trim();
+    return [
+      '${entry.name} — $dateLabel',
+      if (desc != null && desc.isNotEmpty) '',
+      if (desc != null && desc.isNotEmpty) desc,
+    ].join('\n');
+  }
+
+  /// Downloads the holiday image to a temp file, then hands image + text to
+  /// the system share sheet (WhatsApp, Instagram, Facebook, etc.).
+  /// Falls back to text-only sharing if the download fails.
+  Future<void> _share() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final url = entry.imageUrl;
+      if (url != null) {
+        try {
+          final resp = await http
+              .get(Uri.parse(url))
+              .timeout(const Duration(seconds: 15));
+          if (resp.statusCode != 200) {
+            throw Exception('HTTP ${resp.statusCode}');
+          }
+          final ext = url.split('.').last.split('?').first.toLowerCase();
+          final safeExt =
+              const ['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(ext)
+                  ? ext
+                  : 'jpg';
+          final dir = await getTemporaryDirectory();
+          final file = File('${dir.path}/holiday_share.$safeExt');
+          await file.writeAsBytes(resp.bodyBytes);
+          await SharePlus.instance.share(ShareParams(
+            files: [XFile(file.path)],
+            text: _shareText(),
+            subject: entry.name,
+          ));
+          return;
+        } catch (_) {
+          // Image unavailable — fall through to text-only share below.
+        }
+      }
+      await SharePlus.instance.share(ShareParams(
+        text: _shareText(),
+        subject: entry.name,
+      ));
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(day);
+    final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(widget.day);
 
     return SafeArea(
       child: Container(
@@ -324,85 +384,138 @@ class _EventDetailSheet extends StatelessWidget {
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration:
-                      BoxDecoration(color: entry.color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    entry.sourceLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: entry.color,
-                      letterSpacing: 0.3,
+              Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                        color: entry.color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      entry.sourceLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: entry.color,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              entry.name,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(icon: Icons.calendar_today_outlined, text: dateLabel),
-            const SizedBox(height: 10),
-            _DetailRow(icon: Icons.access_time, text: _timeRangeLabel()),
-            if (entry.location != null && entry.location!.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _DetailRow(icon: Icons.place_outlined, text: entry.location!),
-            ],
-            if (entry.description != null &&
-                entry.description!.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _DetailRow(
-                icon: Icons.notes_outlined,
-                text: entry.description!,
+                ],
               ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(
-                  entry.isDeviceEvent ? Icons.smartphone : Icons.public,
-                  size: 14,
-                  color: colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  entry.isDeviceEvent
-                      ? 'Dari kalender perangkat'
-                      : 'Dari Kalender Indonesia',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: colorScheme.onSurface.withValues(alpha: 0.4),
+              const SizedBox(height: 10),
+              Text(
+                entry.name,
+                style:
+                    const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+              ),
+              if (entry.imageUrl != null) ...[
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  // No fixed height: the preview keeps the image's own
+                  // aspect ratio, scaled to the sheet's width.
+                  child: Image.network(
+                    entry.imageUrl!,
+                    width: double.infinity,
+                    fit: BoxFit.fitWidth,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        height: 160,
+                        color: colorScheme.onSurface.withValues(alpha: 0.05),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      );
+                    },
+                    // Broken image URL: hide the image area entirely.
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
                   ),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              _DetailRow(icon: Icons.calendar_today_outlined, text: dateLabel),
+              const SizedBox(height: 10),
+              _DetailRow(icon: Icons.access_time, text: _timeRangeLabel()),
+              if (entry.location != null &&
+                  entry.location!.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _DetailRow(icon: Icons.place_outlined, text: entry.location!),
+              ],
+              if (entry.description != null &&
+                  entry.description!.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _DetailRow(
+                  icon: Icons.notes_outlined,
+                  text: entry.description!,
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    entry.isDeviceEvent ? Icons.smartphone : Icons.public,
+                    size: 14,
+                    color: colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    entry.isDeviceEvent
+                        ? 'Dari kalender perangkat'
+                        : 'Dari Kalender Indonesia',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+              if (entry.imageUrl != null) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _isSharing ? null : _share,
+                    icon: _isSharing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.share_outlined, size: 18),
+                    label: Text(_isSharing ? 'Menyiapkan...' : 'Bagikan'),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
