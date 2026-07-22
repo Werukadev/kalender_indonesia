@@ -11,6 +11,8 @@ import '../services/device_calendar_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
+import 'about_screen.dart';
+import 'history_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _api = ApiService();
   final _scrollController = ScrollController();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   late DateTime _currentMonth;
   late DateTime _selectedDate;
   List<Holiday>? _holidays;
@@ -322,6 +325,8 @@ class _HomeScreenState extends State<HomeScreen> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _AppDrawer(headerColor: preset.primaryColor),
         body: _buildBody(
           preset.primaryColor,
           filteredHolidays,
@@ -371,10 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final header = _MonthHeader(
       currentMonth: _currentMonth,
-      onSettingsTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SettingsScreen()),
-      ),
+      onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
       onTodayTap: _goToToday,
       onYearTap: () => _selectYear(context),
       headerColor: headerColor,
@@ -638,7 +640,7 @@ class _HolidayErrorCard extends StatelessWidget {
 
 class _MonthHeader extends StatelessWidget {
   final DateTime currentMonth;
-  final VoidCallback onSettingsTap;
+  final VoidCallback onMenuTap;
   final VoidCallback onTodayTap;
   final VoidCallback onYearTap;
   final Color headerColor;
@@ -646,7 +648,7 @@ class _MonthHeader extends StatelessWidget {
 
   const _MonthHeader({
     required this.currentMonth,
-    required this.onSettingsTap,
+    required this.onMenuTap,
     required this.onTodayTap,
     required this.onYearTap,
     required this.headerColor,
@@ -668,9 +670,9 @@ class _MonthHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                tooltip: 'Pengaturan',
-                onPressed: onSettingsTap,
+                icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                tooltip: 'Menu',
+                onPressed: onMenuTap,
                 splashRadius: 20,
               ),
               Expanded(
@@ -719,6 +721,106 @@ class _MonthHeader extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── App Drawer ────────────────────────────────────────────────────────────────
+
+class _AppDrawer extends StatelessWidget {
+  final Color headerColor;
+
+  const _AppDrawer({required this.headerColor});
+
+  void _openPage(BuildContext context, Widget page) {
+    Navigator.pop(context); // close the drawer first
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Drawer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: headerColor,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                child: Row(
+                  children: [
+                    Image.asset(
+                      'assets/logo-app.png',
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Kalender Indonesia',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Scrollable main menu area.
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 8),
+              children: [
+                ListTile(
+                  leading: Icon(Icons.auto_stories_outlined,
+                      color: colorScheme.primary),
+                  title: const Text('Sejarah'),
+                  subtitle: const Text(
+                    'Jelajahi semua hari penting',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                  onTap: () => _openPage(context, const HistoryScreen()),
+                ),
+              ],
+            ),
+          ),
+          // Sticky bottom section: Pengaturan & Tentang.
+          Divider(
+            height: 1,
+            thickness: 0.5,
+            color: colorScheme.onSurface.withValues(alpha: 0.12),
+          ),
+          SafeArea(
+            top: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  leading:
+                      Icon(Icons.settings_outlined, color: colorScheme.primary),
+                  title: const Text('Pengaturan'),
+                  onTap: () => _openPage(context, const SettingsScreen()),
+                ),
+                ListTile(
+                  leading: Icon(Icons.info_outline_rounded,
+                      color: colorScheme.primary),
+                  title: const Text('Tentang'),
+                  onTap: () => _openPage(context, const AboutScreen()),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

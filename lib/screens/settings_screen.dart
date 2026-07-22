@@ -6,7 +6,6 @@ import '../models/theme_preset.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
-import '../widgets/about_app_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -24,13 +23,6 @@ class SettingsScreen extends StatelessWidget {
         elevation: 2,
         title: const Text('Pengaturan'),
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline_rounded),
-            tooltip: 'Tentang Aplikasi',
-            onPressed: () => AboutAppDialog.show(context),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),

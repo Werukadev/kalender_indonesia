@@ -2,7 +2,7 @@ name: kalender_indonesia
 description: "Kalender Indonesia - Hari libur, cuti bersama, dan hari besar."
 publish_to: 'none'
 
-version: 2.0.0+7
+version: 3.0.0+8
 
 environment:
   sdk: ^3.11.1
