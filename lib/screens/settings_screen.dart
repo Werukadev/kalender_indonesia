@@ -6,6 +6,7 @@ import '../models/theme_preset.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/batik.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -13,17 +14,10 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final preset = settings.selectedPreset;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: preset.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        title: const Text('Pengaturan'),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      appBar: const BatikAppBar(title: Text('Pengaturan')),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         children: [
@@ -94,6 +88,32 @@ class SettingsScreen extends StatelessWidget {
                 isEnabled: settings.notificationsEnabled,
                 onToggle: () => _toggleNotifications(context, settings),
               ),
+              if (settings.notificationsEnabled) ...[
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colorScheme.onSurface.withValues(alpha: 0.08),
+                ),
+                ListTile(
+                  dense: true,
+                  leading: Icon(
+                    Icons.notification_add_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
+                  title: const Text(
+                    'Tes Notifikasi',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  subtitle: const Text(
+                    'Kirim notifikasi percobaan sekarang',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onTap: () => _testNotification(context, settings),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 20),
@@ -210,6 +230,43 @@ class SettingsScreen extends StatelessWidget {
     } else {
       await settings.setNotificationsEnabled(false);
       await NotificationService.cancelAll();
+    }
+  }
+
+  /// Fires an instant test notification and reports how many reminders are
+  /// scheduled — the quickest way to confirm notifications work end-to-end.
+  Future<void> _testNotification(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final granted = await NotificationService.requestPermission();
+    if (!granted) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Izin notifikasi ditolak — aktifkan lewat pengaturan sistem.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    await NotificationService.showTestNotification();
+    // Re-sync so the pending count reflects reality even on first try.
+    final scheduled = await NotificationService.resync(
+      ApiService(),
+      enabled: true,
+      visibleTypes: settings.visibleTypes,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Notifikasi percobaan dikirim • $scheduled pengingat terjadwal',
+          ),
+        ),
+      );
     }
   }
 

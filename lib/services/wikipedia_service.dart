@@ -16,9 +16,22 @@ class WikipediaResult {
   });
 }
 
+/// One row of a Wikipedia search result list.
+class WikiSearchItem {
+  final String title;
+  final String? description;
+  final String? thumbnailUrl;
+
+  const WikiSearchItem({
+    required this.title,
+    this.description,
+    this.thumbnailUrl,
+  });
+}
+
 /// Looks up the most relevant Indonesian Wikipedia article for a holiday
-/// name and returns its summary — used by the holiday detail page's
-/// "Sejarah" section.
+/// name and returns its lead summary — used by the holiday detail page's
+/// "Artikel Terkait" section (the history itself comes from the cal API).
 ///
 /// Relevance strategy: try the exact title first (redirects included), then
 /// fall back to search — but only accept a search hit whose title actually
@@ -40,7 +53,7 @@ abstract final class WikipediaService {
 
     try {
       // 1) Exact-title hit (follows redirects) is always trustworthy.
-      final direct = await _buildResult(query);
+      final direct = await _fetchSummary(query);
       if (direct != null) {
         _cache[query] = direct;
         return direct;
@@ -51,7 +64,7 @@ abstract final class WikipediaService {
       // "Hari ASI Sedunia" → "ASI" (redirects to "Air susu ibu").
       final core = _corePhrase(query);
       if (core != null) {
-        final coreHit = await _buildResult(core);
+        final coreHit = await _fetchSummary(core);
         if (coreHit != null) {
           _cache[query] = coreHit;
           return coreHit;
@@ -60,7 +73,7 @@ abstract final class WikipediaService {
 
       // 3) Otherwise search, but demand real title overlap.
       final title = await _searchBestTitle(query);
-      final result = title == null ? null : await _buildResult(title);
+      final result = title == null ? null : await _fetchSummary(title);
       _cache[query] = result;
       return result;
     } catch (_) {
@@ -143,35 +156,66 @@ abstract final class WikipediaService {
     return bestScore >= _minTitleScore ? bestTitle : null;
   }
 
-  /// Resolves [title] to a result whose extract is, when available, the
-  /// article's "Sejarah"/"Latar belakang" section — the part explaining why
-  /// the commemoration exists — falling back to the lead summary.
-  static Future<WikipediaResult?> _buildResult(String title) async {
-    final summary = await _fetchSummary(title);
-    if (summary == null) return null;
-    final history = await _fetchHistorySection(summary.title);
-    if (history == null) return summary;
-    return WikipediaResult(
-      title: summary.title,
-      extract: history,
-      pageUrl: summary.pageUrl,
-      thumbnailUrl: summary.thumbnailUrl,
-    );
+  /// Public summary fetch by exact article title (used by the encyclopedia
+  /// article page).
+  static Future<WikipediaResult?> summaryOf(String title) =>
+      _fetchSummary(title);
+
+  /// Searches Indonesian Wikipedia and returns result rows with thumbnails
+  /// and short descriptions — powers the encyclopedia topic lists.
+  static Future<List<WikiSearchItem>> searchArticles(
+    String query, {
+    int limit = 25,
+  }) async {
+    if (query.trim().isEmpty) return const [];
+    final uri = Uri.https('$_lang.wikipedia.org', '/w/api.php', {
+      'action': 'query',
+      'generator': 'search',
+      'gsrsearch': query,
+      'gsrlimit': '$limit',
+      'prop': 'pageimages|description',
+      'piprop': 'thumbnail',
+      'pithumbsize': '160',
+      'format': 'json',
+    });
+    final resp = await http.get(uri).timeout(const Duration(seconds: 12));
+    if (resp.statusCode != 200) return const [];
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    final pages = data['query']?['pages'] as Map<String, dynamic>?;
+    if (pages == null) return const [];
+
+    final entries = pages.values
+        .whereType<Map<String, dynamic>>()
+        .where((p) => p['title'] != null)
+        .toList()
+      // generator results come unordered; 'index' holds the search rank.
+      ..sort((a, b) =>
+          ((a['index'] as int?) ?? 0).compareTo((b['index'] as int?) ?? 0));
+
+    return entries
+        .map((p) => WikiSearchItem(
+              title: p['title'] as String,
+              description: p['description'] as String?,
+              thumbnailUrl: p['thumbnail']?['source'] as String?,
+            ))
+        .toList();
   }
 
-  /// Section headings that answer "why was this day established".
-  static const _historyHeadings = [
-    'sejarah',
-    'latar belakang',
-    'asal',
-    'penetapan',
-    'pembentukan',
-    'peringatan',
-  ];
+  /// Sections that end the readable part of an article.
+  static const _tailHeadings = {
+    'referensi',
+    'pranala luar',
+    'lihat pula',
+    'catatan kaki',
+    'daftar pustaka',
+    'bacaan lanjutan',
+    'galeri',
+    'rujukan',
+  };
 
-  /// Fetches the article's plain text and slices out the first top-level
-  /// section whose heading looks like a history/background section.
-  static Future<String?> _fetchHistorySection(String title) async {
+  /// Full plain-text body of an article, cut before the references/links
+  /// tail sections. Returns null when the article has no text.
+  static Future<String?> fetchArticleText(String title) async {
     final uri = Uri.https('$_lang.wikipedia.org', '/w/api.php', {
       'action': 'query',
       'prop': 'extracts',
@@ -185,39 +229,19 @@ abstract final class WikipediaService {
     final data = json.decode(resp.body) as Map<String, dynamic>;
     final pages = data['query']?['pages'] as Map<String, dynamic>?;
     if (pages == null || pages.isEmpty) return null;
-    final extract =
+    var text =
         (pages.values.first as Map<String, dynamic>)['extract'] as String?;
-    if (extract == null || extract.isEmpty) return null;
+    if (text == null || text.trim().isEmpty) return null;
 
-    // Top-level sections appear as "== Heading ==" lines in the plain text
-    // (subsections use three or more equals and don't match this pattern).
-    final headings = RegExp(r'^==\s*([^=\n]+?)\s*==\s*$', multiLine: true)
-        .allMatches(extract)
-        .toList();
-    for (var i = 0; i < headings.length; i++) {
-      final heading = headings[i].group(1)!.toLowerCase();
-      if (!_historyHeadings.any(heading.contains)) continue;
-      final start = headings[i].end;
-      final end =
-          i + 1 < headings.length ? headings[i + 1].start : extract.length;
-      var text = extract.substring(start, end).trim();
-      // Turn "=== Subheading ===" lines into plain paragraph labels.
-      text = text.replaceAllMapped(
-        RegExp(r'^=+\s*(.+?)\s*=+\s*$', multiLine: true),
-        (m) => '\n${m[1]}\n',
-      );
-      text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
-      if (text.isEmpty) return null;
-      return _capLength(text, 1800);
+    // Cut everything from the first tail section onward.
+    for (final m in RegExp(r'^==\s*([^=\n]+?)\s*==\s*$', multiLine: true)
+        .allMatches(text)) {
+      if (_tailHeadings.contains(m.group(1)!.toLowerCase().trim())) {
+        text = text!.substring(0, m.start);
+        break;
+      }
     }
-    return null;
-  }
-
-  static String _capLength(String text, int max) {
-    if (text.length <= max) return text;
-    final cut = text.substring(0, max);
-    final lastStop = cut.lastIndexOf('. ');
-    return '${lastStop > max ~/ 2 ? cut.substring(0, lastStop + 1) : cut} …';
+    return text!.trim().isEmpty ? null : text.trim();
   }
 
   static Future<WikipediaResult?> _fetchSummary(String title) async {

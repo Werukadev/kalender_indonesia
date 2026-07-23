@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/holiday.dart';
-import '../providers/settings_provider.dart';
 import '../services/wikipedia_service.dart';
+import '../widgets/batik.dart';
 
 const kTypeColors = {
   HolidayType.liburNasional: Color(0xFFE53935),
@@ -46,19 +45,13 @@ class _HolidayDetailScreenState extends State<HolidayDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final preset = context.watch<SettingsProvider>().selectedPreset;
     final colorScheme = Theme.of(context).colorScheme;
     final h = widget.holiday;
     final typeColor = kTypeColors[h.type]!;
     final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(h.date);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: preset.primaryColor,
-        foregroundColor: Colors.white,
-        title: const Text('Detail'),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      appBar: const BatikAppBar(title: Text('Detail')),
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
@@ -135,6 +128,41 @@ class _HolidayDetailScreenState extends State<HolidayDetailScreen> {
                     ),
                   ),
                 ],
+                if (h.sejarah != null) ...[
+                  const SizedBox(height: 24),
+                  Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.menu_book_outlined,
+                        size: 17,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Sejarah',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    h.sejarah!.trim(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Divider(
                   height: 1,
@@ -145,13 +173,13 @@ class _HolidayDetailScreenState extends State<HolidayDetailScreen> {
                 Row(
                   children: [
                     Icon(
-                      Icons.menu_book_outlined,
+                      Icons.link_rounded,
                       size: 17,
                       color: colorScheme.primary,
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'Sejarah',
+                      'Artikel Terkait',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,

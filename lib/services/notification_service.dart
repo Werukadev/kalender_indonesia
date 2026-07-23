@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -44,23 +45,61 @@ abstract final class NotificationService {
     return granted ?? true;
   }
 
+  /// Cancels every *scheduled* reminder. Deliberately leaves already-shown
+  /// notifications in the shade — cancelAll() would silently dismiss the
+  /// midnight notification the moment the user opens the app.
   static Future<void> cancelAll() async {
     await initialize();
-    await _plugin.cancelAll();
+    await _plugin.cancelAllPendingNotifications();
+  }
+
+  /// Number of currently scheduled (pending) notifications.
+  static Future<int> pendingCount() async {
+    await initialize();
+    final pending = await _plugin.pendingNotificationRequests();
+    return pending.length;
+  }
+
+  /// Fires an immediate notification so the user can verify that
+  /// permissions, the channel, and the icon actually work on this device.
+  static Future<void> showTestNotification() async {
+    await initialize();
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    try {
+      await _plugin.show(
+        id: 999,
+        title: 'Notifikasi berfungsi 🎉',
+        body: 'Pengingat hari penting akan muncul seperti ini '
+            'lewat tengah malam pada tanggalnya.',
+        notificationDetails:
+            const NotificationDetails(android: androidDetails),
+      );
+      debugPrint('NotificationService: test notification show() completed');
+    } catch (e, st) {
+      debugPrint('NotificationService: test notification FAILED: $e\n$st');
+      rethrow;
+    }
   }
 
   /// Re-syncs all scheduled notifications from the holiday API (current and
   /// next month), replacing any previous schedule. Cache is used when the
-  /// network is unavailable. Safe to call fire-and-forget.
-  static Future<void> resync(
+  /// network is unavailable. Returns how many reminders were scheduled.
+  /// Safe to call fire-and-forget.
+  static Future<int> resync(
     ApiService api, {
     required bool enabled,
     required Set<HolidayType> visibleTypes,
   }) async {
     await initialize();
     if (!enabled) {
-      await _plugin.cancelAll();
-      return;
+      await _plugin.cancelAllPendingNotifications();
+      return 0;
     }
 
     final now = DateTime.now();
@@ -78,16 +117,21 @@ abstract final class NotificationService {
         if (cached != null) all.addAll(cached.holidays);
       }
     }
-    if (all.isEmpty) return;
-    await _schedule(all, visibleTypes: visibleTypes);
+    if (all.isEmpty) {
+      debugPrint('NotificationService: no holiday data to schedule');
+      return 0;
+    }
+    return _schedule(all, visibleTypes: visibleTypes);
   }
 
-  static Future<void> _schedule(
+  static Future<int> _schedule(
     List<Holiday> holidays, {
     required Set<HolidayType> visibleTypes,
   }) async {
     await AppTimezone.ready;
-    await _plugin.cancelAll();
+    // Pending only — cancelAll() would also dismiss notifications currently
+    // sitting in the shade (which is how reminders kept "disappearing").
+    await _plugin.cancelAllPendingNotifications();
 
     // One notification per calendar day.
     final byDate = <DateTime, List<Holiday>>{};
@@ -100,6 +144,7 @@ abstract final class NotificationService {
     final now = tz.TZDateTime.now(tz.local);
     final dates = byDate.keys.toList()..sort();
     var id = 1000;
+    var scheduled = 0;
     for (final date in dates) {
       final when =
           tz.TZDateTime(tz.local, date.year, date.month, date.day, 0, 5);
@@ -143,19 +188,30 @@ abstract final class NotificationService {
           notificationDetails: NotificationDetails(android: androidDetails),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         );
-      } on Exception {
+        scheduled++;
+      } catch (e) {
         // Exact alarms not permitted on this device — inexact is fine, the
         // notification still arrives shortly after midnight.
-        await _plugin.zonedSchedule(
-          id: id++,
-          title: title,
-          body: body,
-          scheduledDate: when,
-          notificationDetails: NotificationDetails(android: androidDetails),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        );
+        debugPrint('NotificationService: exact schedule failed ($e), '
+            'falling back to inexact');
+        try {
+          await _plugin.zonedSchedule(
+            id: id++,
+            title: title,
+            body: body,
+            scheduledDate: when,
+            notificationDetails:
+                NotificationDetails(android: androidDetails),
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          );
+          scheduled++;
+        } catch (e) {
+          debugPrint('NotificationService: schedule failed entirely: $e');
+        }
       }
     }
+    debugPrint('NotificationService: $scheduled reminder(s) scheduled');
+    return scheduled;
   }
 
   /// Downloads the first available holiday image for [date] into app storage

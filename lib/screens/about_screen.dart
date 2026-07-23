@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../providers/settings_provider.dart';
+import '../widgets/batik.dart';
 
 /// "Tentang": app info page — replaces the old about dialog that used to
 /// hang off the settings screen's app bar.
@@ -57,7 +56,6 @@ class _AboutScreenState extends State<AboutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final preset = context.watch<SettingsProvider>().selectedPreset;
     final colorScheme = Theme.of(context).colorScheme;
 
     final versionLabel = !_loaded
@@ -67,12 +65,7 @@ class _AboutScreenState extends State<AboutScreen> {
             : 'Versi $_version ($_buildNumber)';
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: preset.primaryColor,
-        foregroundColor: Colors.white,
-        title: const Text('Tentang'),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      appBar: const BatikAppBar(title: Text('Tentang')),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
@@ -133,13 +126,13 @@ class _AboutScreenState extends State<AboutScreen> {
           _dividerIndent(colorScheme),
           _InfoSection(
             icon: Icons.storage_outlined,
-            title: 'Sumber Data API',
+            title: 'Sumber Data',
             colorScheme: colorScheme,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Data hari libur bersumber dari:',
+                  'Data hari libur & hari besar:',
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.4,
@@ -155,9 +148,90 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 const SizedBox(height: 4),
                 _UrlTile(
-                  label: 'id.wikipedia.org (artikel sejarah)',
+                  label: 'id.wikipedia.org (ensiklopedia & artikel)',
                   colorScheme: colorScheme,
                   onTap: () => _openUrl('https://id.wikipedia.org'),
+                ),
+              ],
+            ),
+          ),
+          _dividerIndent(colorScheme),
+          _InfoSection(
+            icon: Icons.newspaper_outlined,
+            title: 'Sumber Berita',
+            colorScheme: colorScheme,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Berita diambil dari RSS resmi media berikut, serta '
+                  'Google News RSS sebagai pelengkap:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final source in const [
+                      'CNN Indonesia',
+                      'Kompas.com',
+                      'Detik',
+                      'Tempo',
+                      'ANTARA News',
+                      'Media Indonesia',
+                      'SINDOnews',
+                      'Kumparan',
+                      'VOI.id',
+                      'VIVA.co.id',
+                      'JPNN',
+                      'Republika',
+                      'Tirto.id',
+                      'Mongabay Indonesia',
+                      'BBC Indonesia',
+                      'DW Indonesia',
+                      'CNA Indonesia',
+                      'The Jakarta Post',
+                      'Bloomberg Technoz',
+                      'Google News',
+                    ])
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              colorScheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color:
+                                colorScheme.primary.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Text(
+                          source,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Seluruh hak cipta konten berita ada pada media '
+                  'masing-masing.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurface.withValues(alpha: 0.45),
+                  ),
                 ),
               ],
             ),

@@ -63,6 +63,7 @@ class Holiday {
   final HolidayType type;
   final bool isNationalHoliday;
   final String? description;
+  final String? sejarah;
   final String? imageUrl;
 
   const Holiday({
@@ -71,17 +72,21 @@ class Holiday {
     required this.type,
     required this.isNationalHoliday,
     this.description,
+    this.sejarah,
     this.imageUrl,
   });
 
   factory Holiday.fromJson(Map<String, dynamic> json) {
     final imageUrl = json['image_url'] as String?;
+    final sejarah = json['sejarah'] as String?;
     return Holiday(
       date: DateTime.parse(json['date'] as String),
       name: json['name'] as String,
       type: HolidayType.fromString(json['type'] as String),
       isNationalHoliday: json['is_national_holiday'] as bool? ?? false,
       description: json['description'] as String?,
+      sejarah:
+          (sejarah != null && sejarah.trim().isEmpty) ? null : sejarah,
       imageUrl: (imageUrl != null && imageUrl.trim().isEmpty) ? null : imageUrl,
     );
   }

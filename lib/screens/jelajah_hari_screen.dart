@@ -4,22 +4,23 @@ import 'package:provider/provider.dart';
 import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
+import '../widgets/batik.dart';
 import 'holiday_detail_screen.dart';
 
-/// "Sejarah": every holiday of the current year as a scrollable feed.
+/// "Jelajah Hari": every holiday of the current year as a scrollable feed.
 ///
 /// Two view modes — an Instagram-like card feed (image + title + caption)
 /// and a compact list. Both open anchored on today: swipe down for what's
 /// coming, swipe up for what has passed. Tapping any item opens the detail
-/// page (API description + Wikipedia history).
-class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+/// page (API description + Wikipedia article).
+class JelajahHariScreen extends StatefulWidget {
+  const JelajahHariScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<JelajahHariScreen> createState() => _JelajahHariScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _JelajahHariScreenState extends State<JelajahHariScreen> {
   final _api = ApiService();
   final _searchCtrl = TextEditingController();
 
@@ -79,7 +80,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final preset = settings.selectedPreset;
     final colorScheme = Theme.of(context).colorScheme;
 
     final query = _query.trim().toLowerCase();
@@ -89,11 +89,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: preset.primaryColor,
-        foregroundColor: Colors.white,
-        title: const Text('Sejarah'),
-        iconTheme: const IconThemeData(color: Colors.white),
+      appBar: BatikAppBar(
+        title: const Text('Jelajah Hari'),
         actions: [
           IconButton(
             icon: Icon(

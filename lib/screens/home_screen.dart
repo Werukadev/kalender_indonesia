@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -9,10 +11,13 @@ import '../services/api_service.dart';
 import '../services/app_settings_launcher.dart';
 import '../services/device_calendar_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/batik.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
 import 'about_screen.dart';
-import 'history_screen.dart';
+import 'encyclopedia_screen.dart';
+import 'jelajah_hari_screen.dart';
+import 'news_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -64,9 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _loadDeviceEvents() {
-    context
-        .read<DeviceCalendarProvider>()
-        .loadMonth(_currentMonth.year, _currentMonth.month);
+    context.read<DeviceCalendarProvider>().loadMonth(
+      _currentMonth.year,
+      _currentMonth.month,
+    );
   }
 
   @override
@@ -77,8 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onDayTap(DateTime date) {
     // Gray outside dates belong to the previous/next month — jump there.
-    final monthChanged = date.year != _currentMonth.year ||
-        date.month != _currentMonth.month;
+    final monthChanged =
+        date.year != _currentMonth.year || date.month != _currentMonth.month;
     setState(() {
       _selectedDate = date;
       if (monthChanged) {
@@ -108,8 +114,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _error = null;
 
     // Phase 1: show cached data immediately — no spinner if cache exists
-    final cached =
-        await _api.getCached(_currentMonth.year, _currentMonth.month);
+    final cached = await _api.getCached(
+      _currentMonth.year,
+      _currentMonth.month,
+    );
     if (!mounted) return;
 
     if (cached != null) {
@@ -129,8 +137,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Phase 2: refresh from network silently in background
     try {
-      final fresh =
-          await _api.fetchFresh(_currentMonth.year, _currentMonth.month);
+      final fresh = await _api.fetchFresh(
+        _currentMonth.year,
+        _currentMonth.month,
+      );
       if (!mounted) return;
       setState(() {
         _holidays = fresh.holidays;
@@ -187,7 +197,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// currently on screen.
   void _shiftSelectedDay(int delta) {
     final newDate = _selectedDate.add(Duration(days: delta));
-    final monthChanged = newDate.year != _currentMonth.year ||
+    final monthChanged =
+        newDate.year != _currentMonth.year ||
         newDate.month != _currentMonth.month;
     setState(() {
       _selectedDate = newDate;
@@ -219,8 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _selectYear(BuildContext context) async {
-    final preset =
-        Provider.of<SettingsProvider>(context, listen: false).selectedPreset;
+    final preset = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    ).selectedPreset;
     final primaryColor = preset.primaryColor;
     final currentYear = _currentMonth.year;
     const firstYear = 2010;
@@ -230,8 +243,9 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) {
         return Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -247,11 +261,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: GridView.builder(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      childAspectRatio: 1.4,
-                      crossAxisSpacing: 6,
-                      mainAxisSpacing: 6,
-                    ),
+                          crossAxisCount: 4,
+                          childAspectRatio: 1.4,
+                          crossAxisSpacing: 6,
+                          mainAxisSpacing: 6,
+                        ),
                     itemCount: lastYear - firstYear + 1,
                     itemBuilder: (_, i) {
                       final year = firstYear + i;
@@ -311,8 +325,10 @@ class _HomeScreenState extends State<HomeScreen> {
         .where((h) => settings.isTypeVisible(h.type))
         .toList();
     final deviceCalendar = context.watch<DeviceCalendarProvider>();
-    final deviceEvents =
-        deviceCalendar.eventsFor(_currentMonth.year, _currentMonth.month);
+    final deviceEvents = deviceCalendar.eventsFor(
+      _currentMonth.year,
+      _currentMonth.month,
+    );
     // Only an explicit `false` should show the banner — while null (still
     // resolving, or never requested yet), it's usually just a split-second
     // permission lookup, not a genuine denial.
@@ -340,8 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _withCalendarSwipe(Widget child) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: (d) =>
-          _calendarDragStartX = d.globalPosition.dx,
+      onHorizontalDragStart: (d) => _calendarDragStartX = d.globalPosition.dx,
       onHorizontalDragEnd: (d) {
         final dx = d.globalPosition.dx - _calendarDragStartX;
         if (dx < -50) _nextMonth();
@@ -398,18 +413,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final Widget holidaySection = _isLoading
         ? const _HolidayLoadingCard()
         : _error != null
-            ? _HolidayErrorCard(onRetry: _loadHolidays)
-            : EventList(
-                holidays: holidays,
-                deviceEvents: deviceEvents,
-                selectedDate: _selectedDate,
-              );
+        ? _HolidayErrorCard(onRetry: _loadHolidays)
+        : EventList(
+            holidays: holidays,
+            deviceEvents: deviceEvents,
+            selectedDate: _selectedDate,
+          );
 
     final permissionBanner = calendarPermissionDenied
         ? _CalendarPermissionBanner(
-            onRefresh: () => context
-                .read<DeviceCalendarProvider>()
-                .refresh(_currentMonth.year, _currentMonth.month),
+            onRefresh: () => context.read<DeviceCalendarProvider>().refresh(
+              _currentMonth.year,
+              _currentMonth.month,
+            ),
           )
         : null;
 
@@ -432,10 +448,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 VerticalDivider(
                   width: 1,
                   thickness: 0.5,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.12),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.12),
                 ),
                 Expanded(
                   flex: 4,
@@ -544,7 +559,11 @@ class _OfflineBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          const Icon(Icons.wifi_off_rounded, size: 13, color: Color(0xFFF59E0B)),
+          const Icon(
+            Icons.wifi_off_rounded,
+            size: 13,
+            color: Color(0xFFF59E0B),
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -661,64 +680,72 @@ class _MonthHeader extends StatelessWidget {
     // Container paints the color behind the status bar too (edge-to-edge,
     // no separate AppBar); SafeArea only pads the row content below it.
     return Container(
-      color: headerColor,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                tooltip: 'Menu',
-                onPressed: onMenuTap,
-                splashRadius: 20,
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: onYearTap,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        monthName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.arrow_drop_down,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ],
-                  ),
+      decoration: BoxDecoration(
+        gradient: batikGradient(headerColor),
+        border: Border(bottom: batikEdgeSide),
+      ),
+      child: CustomPaint(
+        painter: const BatikKawungPainter(spacing: 40, intensity: 0.7),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                  tooltip: 'Menu',
+                  onPressed: onMenuTap,
+                  splashRadius: 20,
                 ),
-              ),
-              if (isRefreshing)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white60),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onYearTap,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          monthName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              IconButton(
-                icon: const Icon(Icons.today_outlined, color: Colors.white),
-                tooltip: 'Hari Ini',
-                onPressed: onTodayTap,
-                splashRadius: 20,
-              ),
-            ],
+                if (isRefreshing)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white60,
+                        ),
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.today_outlined, color: Colors.white),
+                  tooltip: 'Hari Ini',
+                  onPressed: onTodayTap,
+                  splashRadius: 20,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -742,85 +769,150 @@ class _AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Fixed header height regardless of theme/text metrics — only the
+    // colors may change when the theme does.
+    final headerHeight = MediaQuery.of(context).padding.top + 132.0;
+
     return Drawer(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: headerColor,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                child: Row(
-                  children: [
-                    Image.asset(
-                      'assets/logo-app.png',
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Kalender Indonesia',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(18)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            // Translucent surface over the blurred page behind = glass.
+            // Dark themes get a more opaque pane so the batik behind
+            // doesn't bleed into the menu and blur the header boundary.
+            color: colorScheme.surface.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? 0.95
+                  : 0.86,
             ),
-          ),
-          // Scrollable main menu area.
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(top: 8),
-              children: [
-                ListTile(
-                  leading: Icon(Icons.auto_stories_outlined,
-                      color: colorScheme.primary),
-                  title: const Text('Sejarah'),
-                  subtitle: const Text(
-                    'Jelajahi semua hari penting',
-                    style: TextStyle(fontSize: 11.5),
-                  ),
-                  onTap: () => _openPage(context, const HistoryScreen()),
-                ),
-              ],
-            ),
-          ),
-          // Sticky bottom section: Pengaturan & Tentang.
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: colorScheme.onSurface.withValues(alpha: 0.12),
-          ),
-          SafeArea(
-            top: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ListTile(
-                  leading:
-                      Icon(Icons.settings_outlined, color: colorScheme.primary),
-                  title: const Text('Pengaturan'),
-                  onTap: () => _openPage(context, const SettingsScreen()),
+                Container(
+                  height: headerHeight,
+                  decoration: BoxDecoration(
+                    gradient: batikGradient(headerColor),
+                    border: Border(bottom: batikEdgeSide),
+                  ),
+                  child: CustomPaint(
+                    painter: const BatikKawungPainter(),
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // "Kalender" in Javanese script (aksara Jawa).
+                            const Text(
+                              'ꦏꦭꦺꦤ꧀ꦢꦺꦂ',
+                              style: TextStyle(
+                                fontFamily: 'NotoSansJavanese',
+                                color: Colors.white,
+                                fontSize: 34,
+                                height: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'KALENDER INDONESIA',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 3.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                ListTile(
-                  leading: Icon(Icons.info_outline_rounded,
-                      color: colorScheme.primary),
-                  title: const Text('Tentang'),
-                  onTap: () => _openPage(context, const AboutScreen()),
+                // Scrollable main menu area.
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.only(top: 8),
+                    children: [
+                      ListTile(
+                        leading: Icon(
+                          Icons.auto_stories_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Jelajah Hari'),
+                        subtitle: const Text(
+                          'Jelajahi semua hari penting',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onTap: () =>
+                            _openPage(context, const JelajahHariScreen()),
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          Icons.newspaper_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Berita Hari Ini'),
+                        subtitle: const Text(
+                          'Berita terkini & hari penting hari ini',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onTap: () => _openPage(context, const NewsScreen()),
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          Icons.menu_book_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Ensiklopedia Indonesia'),
+                        subtitle: const Text(
+                          'Budaya, sejarah, geografi & lainnya',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onTap: () =>
+                            _openPage(context, const EncyclopediaScreen()),
+                      ),
+                    ],
+                  ),
+                ),
+                // Sticky bottom section: Pengaturan & Tentang.
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ListTile(
+                        leading: Icon(
+                          Icons.settings_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Pengaturan'),
+                        onTap: () => _openPage(context, const SettingsScreen()),
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          Icons.info_outline_rounded,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Tentang'),
+                        onTap: () => _openPage(context, const AboutScreen()),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
