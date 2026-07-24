@@ -1,13 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../models/holiday.dart';
 import 'api_service.dart';
 import 'app_timezone.dart';
+import 'bmkg_service.dart';
+import 'offline_cache.dart';
 
 /// Local scheduled notifications — no Firebase involved.
 ///
@@ -16,6 +15,12 @@ import 'app_timezone.dart';
 /// holiday's date. The boot receiver declared in AndroidManifest re-registers
 /// alarms after a reboot, and alarms whose time passed while the device was
 /// off fire immediately once it turns on.
+///
+/// Alarms can still be lost wholesale (aggressive OEM battery killers,
+/// force-stop, reinstall after midnight), so resync also has a catch-up
+/// path: if *today* has holidays and today's notification never made it to
+/// the shade, it is shown immediately — at most once per day, keyed by a
+/// deterministic per-date notification id.
 abstract final class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
@@ -38,8 +43,10 @@ abstract final class NotificationService {
   /// auto-granted via USE_EXACT_ALARM for calendar apps.
   static Future<bool> requestPermission() async {
     await initialize();
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android == null) return true;
     final granted = await android.requestNotificationsPermission();
     return granted ?? true;
@@ -75,10 +82,10 @@ abstract final class NotificationService {
       await _plugin.show(
         id: 999,
         title: 'Notifikasi berfungsi 🎉',
-        body: 'Pengingat hari penting akan muncul seperti ini '
+        body:
+            'Pengingat hari penting akan muncul seperti ini '
             'lewat tengah malam pada tanggalnya.',
-        notificationDetails:
-            const NotificationDetails(android: androidDetails),
+        notificationDetails: const NotificationDetails(android: androidDetails),
       );
       debugPrint('NotificationService: test notification show() completed');
     } catch (e, st) {
@@ -124,6 +131,14 @@ abstract final class NotificationService {
     return _schedule(all, visibleTypes: visibleTypes);
   }
 
+  /// Deterministic notification id per calendar day, so the 00:05 alarm
+  /// and the catch-up path can never produce two notifications for the
+  /// same date (a re-post with the same id replaces, not duplicates).
+  static int _idForDate(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+
+  /// Prefs key remembering the last date the catch-up path handled.
+  static const _lastCatchUpKey = 'notifLastCatchupDate';
+
   static Future<int> _schedule(
     List<Holiday> holidays, {
     required Set<HolidayType> visibleTypes,
@@ -142,27 +157,37 @@ abstract final class NotificationService {
     }
 
     final now = tz.TZDateTime.now(tz.local);
+    final today = DateTime(now.year, now.month, now.day);
     final dates = byDate.keys.toList()..sort();
-    var id = 1000;
     var scheduled = 0;
     for (final date in dates) {
-      final when =
-          tz.TZDateTime(tz.local, date.year, date.month, date.day, 0, 5);
-      if (!when.isAfter(now)) continue;
+      final when = tz.TZDateTime(
+        tz.local,
+        date.year,
+        date.month,
+        date.day,
+        0,
+        5,
+      );
 
       final items = byDate[date]!
         ..sort((a, b) => a.type.sortOrder.compareTo(b.type.sortOrder));
-      final title = items.length == 1
-          ? items.first.name
-          : '${items.length} hari penting hari ini';
+
+      // The holiday names must always be visible in the notification —
+      // both collapsed (title/body) and expanded (big text / picture).
       final names = items.map((h) => h.name).join(' • ');
+      final title = names;
       final desc = items.first.description?.trim();
       final body = items.length == 1
           ? (desc != null && desc.isNotEmpty ? desc : items.first.name)
           : names;
+      final bigText = items.length == 1
+          ? body
+          : items.map((h) => '• ${h.name}').join('\n');
 
-      // If a holiday that day has an image, attach it as a big picture.
-      final imagePath = await _downloadImage(items, date);
+      // If a holiday that day has an image, attach it as a big picture
+      // (plus a thumbnail while collapsed).
+      final imagePath = await _downloadImage(items);
 
       final androidDetails = AndroidNotificationDetails(
         _channelId,
@@ -170,38 +195,54 @@ abstract final class NotificationService {
         channelDescription: _channelDescription,
         importance: Importance.high,
         priority: Priority.high,
+        largeIcon: imagePath != null ? FilePathAndroidBitmap(imagePath) : null,
         styleInformation: imagePath != null
             ? BigPictureStyleInformation(
                 FilePathAndroidBitmap(imagePath),
-                summaryText: body,
                 contentTitle: title,
+                summaryText: bigText,
+                hideExpandedLargeIcon: true,
               )
-            : BigTextStyleInformation(body, contentTitle: title),
+            : BigTextStyleInformation(bigText, contentTitle: title),
       );
+      final details = NotificationDetails(android: androidDetails);
+      final id = _idForDate(date);
+
+      if (!when.isAfter(now)) {
+        // 00:05 already passed. For today that must not mean silence —
+        // the alarm may have been killed before it could fire (reboot,
+        // battery saver, app installed after midnight) — so deliver the
+        // notification right now instead of skipping the date.
+        if (date == today) {
+          await _catchUpToday(id, title: title, body: body, details: details);
+        }
+        continue;
+      }
 
       try {
         await _plugin.zonedSchedule(
-          id: id++,
+          id: id,
           title: title,
           body: body,
           scheduledDate: when,
-          notificationDetails: NotificationDetails(android: androidDetails),
+          notificationDetails: details,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         );
         scheduled++;
       } catch (e) {
         // Exact alarms not permitted on this device — inexact is fine, the
         // notification still arrives shortly after midnight.
-        debugPrint('NotificationService: exact schedule failed ($e), '
-            'falling back to inexact');
+        debugPrint(
+          'NotificationService: exact schedule failed ($e), '
+          'falling back to inexact',
+        );
         try {
           await _plugin.zonedSchedule(
-            id: id++,
+            id: id,
             title: title,
             body: body,
             scheduledDate: when,
-            notificationDetails:
-                NotificationDetails(android: androidDetails),
+            notificationDetails: details,
             androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           );
           scheduled++;
@@ -214,37 +255,135 @@ abstract final class NotificationService {
     return scheduled;
   }
 
-  /// Downloads the first available holiday image for [date] into app storage
-  /// (a temp dir could be wiped before the alarm fires). Returns null when
-  /// no image exists or the download fails — caller falls back to text-only.
-  static Future<String?> _downloadImage(
-    List<Holiday> items,
-    DateTime date,
-  ) async {
+  // Fixed ids for the BMKG alert notifications (replaced in place when a
+  // newer alert arrives, never stacking up).
+  static const _quakeAlertId = 3001;
+  static const _weatherAlertId = 3002;
+
+  static const _bmkgChannelId = 'bmkg_alerts';
+  static const _bmkgChannelName = 'Peringatan BMKG';
+  static const _bmkgChannelDescription =
+      'Gempa signifikan dan peringatan dini cuaca dari BMKG';
+
+  /// Checks BMKG and notifies about (1) a new significant earthquake —
+  /// felt by people or M ≥ 5 — and (2) the newest nowcast weather warning.
+  /// Deduplicated via SharedPreferences, so each event notifies once.
+  ///
+  /// No background scheduler is involved: this runs whenever the app
+  /// syncs (every open), same as the holiday catch-up path. Fire-and-
+  /// forget; failures are silent.
+  static Future<void> checkBmkgAlerts() async {
+    await initialize();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const androidDetails = AndroidNotificationDetails(
+        _bmkgChannelId,
+        _bmkgChannelName,
+        channelDescription: _bmkgChannelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+      );
+      const details = NotificationDetails(android: androidDetails);
+
+      // 1) Significant earthquake.
+      final quake = await BmkgService.latestQuake();
+      final significant =
+          quake != null &&
+          (quake.dirasakan != null || (quake.magnitude ?? 0) >= 5.0);
+      if (significant) {
+        final key = '${quake.tanggal}|${quake.jam}';
+        // Only near-real-time events are worth a notification; opening
+        // the app days later must not replay an old quake.
+        final recent =
+            quake.dateTime != null &&
+            DateTime.now().difference(quake.dateTime!).inHours < 24;
+        if (recent && prefs.getString('bmkgLastQuakeNotif') != key) {
+          final magnitude = quake.magnitude == null
+              ? ''
+              : 'M${quake.magnitude!.toStringAsFixed(1)} ';
+          await _plugin.show(
+            id: _quakeAlertId,
+            title: '🌏 Gempa $magnitude— ${quake.wilayah}',
+            body: [
+              '${quake.tanggal} ${quake.jam}',
+              if (quake.potensi != null) quake.potensi!,
+              if (quake.dirasakan != null) 'Dirasakan: ${quake.dirasakan!}',
+            ].join('\n'),
+            notificationDetails: details,
+          );
+          await prefs.setString('bmkgLastQuakeNotif', key);
+        }
+      }
+
+      // 2) Newest nowcast weather warning.
+      final warnings = await BmkgService.nowcastWarnings();
+      if (warnings.isNotEmpty) {
+        final warning = warnings.first;
+        final recent =
+            warning.pubDate == null ||
+            DateTime.now().difference(warning.pubDate!).inHours < 12;
+        if (recent && prefs.getString('bmkgLastWarningNotif') != warning.link) {
+          await _plugin.show(
+            id: _weatherAlertId,
+            title: '⚠️ ${warning.title}',
+            body: warning.description,
+            notificationDetails: details,
+          );
+          await prefs.setString('bmkgLastWarningNotif', warning.link);
+        }
+      }
+    } catch (e) {
+      debugPrint('NotificationService.checkBmkgAlerts failed: $e');
+    }
+  }
+
+  /// Shows today's holiday notification immediately if it never reached the
+  /// shade — at most once per day. If the 00:05 alarm did fire and its
+  /// notification is still visible, only the "handled" marker is written.
+  static Future<void> _catchUpToday(
+    int id, {
+    required String title,
+    required String body,
+    required NotificationDetails details,
+  }) async {
+    try {
+      final todayKey = DateTime.now().toIso8601String().substring(
+        0,
+        10,
+      ); // yyyy-MM-dd
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_lastCatchUpKey) == todayKey) return;
+
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      final active = await android?.getActiveNotifications();
+      final alreadyVisible = active?.any((n) => n.id == id) ?? false;
+      if (!alreadyVisible) {
+        await _plugin.show(
+          id: id,
+          title: title,
+          body: body,
+          notificationDetails: details,
+        );
+        debugPrint('NotificationService: catch-up notification shown');
+      }
+      await prefs.setString(_lastCatchUpKey, todayKey);
+    } catch (e) {
+      debugPrint('NotificationService: catch-up failed: $e');
+    }
+  }
+
+  /// Local path of the first available holiday image, via [OfflineCache]
+  /// (persistent app storage — a temp dir could be wiped before the alarm
+  /// fires, and the same file serves the in-app holiday pages offline).
+  /// Null when no image exists or the download fails — caller falls back
+  /// to text-only.
+  static Future<String?> _downloadImage(List<Holiday> items) async {
     final withImage = items.where((h) => h.imageUrl != null).toList();
     if (withImage.isEmpty) return null;
-    final url = withImage.first.imageUrl!;
-    try {
-      final dir = await getApplicationSupportDirectory();
-      final imagesDir = Directory('${dir.path}/notif_images');
-      if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
-      final ext = url.split('.').last.split('?').first.toLowerCase();
-      final safeExt = const ['jpg', 'jpeg', 'png', 'webp'].contains(ext)
-          ? ext
-          : 'jpg';
-      final file = File(
-        '${imagesDir.path}/'
-        '${date.year}-${date.month}-${date.day}.$safeExt',
-      );
-      if (await file.exists()) return file.path;
-
-      final resp =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      if (resp.statusCode != 200) return null;
-      await file.writeAsBytes(resp.bodyBytes);
-      return file.path;
-    } catch (_) {
-      return null;
-    }
+    final file = await OfflineCache.imageFile(withImage.first.imageUrl!);
+    return file?.path;
   }
 }

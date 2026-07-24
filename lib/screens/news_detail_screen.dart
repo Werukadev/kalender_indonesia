@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/article_extractor.dart';
 import '../services/news_service.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 
 /// Native in-app reader for one news article: the story's text is
 /// extracted from the source page and rendered as a clean reading view —
@@ -86,12 +87,11 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
             padding: EdgeInsets.zero,
             children: [
               if (imageUrl != null)
-                Image.network(
-                  imageUrl,
+                CachedImage(
+                  url: imageUrl,
                   width: double.infinity,
                   height: 210,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),

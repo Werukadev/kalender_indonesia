@@ -21,6 +21,12 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Info BMKG: picks the nearest weather forecast point / maritime
+         area from the device location. Approximate accuracy is enough;
+         FINE is declared so Android 12+ can offer the precise option. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <application
         android:label="Kalender Indonesia"
         android:name="${applicationName}"

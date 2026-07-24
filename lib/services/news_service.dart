@@ -41,10 +41,10 @@ class NewsItem {
       );
 }
 
-/// Aggregates Indonesian news RSS feeds (CNN Indonesia, Tempo, ANTARA) and
-/// Google News search — the latter used to pull coverage of today's
-/// holidays from the calendar, across many more outlets (Kompas, Detik,
-/// etc. appear there even though their own RSS endpoints are defunct).
+/// Aggregates Indonesian news from official outlet RSS feeds only.
+/// Google News stand-in feeds were dropped: their items carry no banner
+/// image and their redirect links routinely defeat article extraction,
+/// which produced empty-looking stories in the reader.
 abstract final class NewsService {
   static const _headers = {'User-Agent': 'Mozilla/5.0'};
 
@@ -63,28 +63,11 @@ abstract final class NewsService {
     ('Bloomberg Technoz', 'https://www.bloombergtechnoz.com/rss'),
   ];
 
-  /// Outlets whose official RSS is defunct or Cloudflare-walled — served
-  /// through Google News per-site search instead, as a stand-in feed.
-  static const _gnewsOutlets = [
-    ('Kompas.com', 'kompas.com'),
-    ('VIVA.co.id', 'viva.co.id'),
-    ('JPNN', 'jpnn.com'),
-    ('Republika', 'republika.co.id'),
-    ('Tirto.id', 'tirto.id'),
-    ('CNA Indonesia', 'cna.id'),
-    ('DW Indonesia', 'dw.com'),
-    ('The Jakarta Post', 'thejakartapost.com'),
-  ];
-
-  static String _gnewsSiteUrl(String domain) =>
-      'https://news.google.com/rss/search?q=site:$domain&hl=id&gl=ID&ceid=ID:id';
-
   /// Latest general news, merged from all feeds, newest first,
   /// deduplicated by link.
   static Future<List<NewsItem>> fetchLatest() async {
     final results = await Future.wait([
       ..._feeds.map((f) => _fetchFeed(f.$1, f.$2)),
-      ..._gnewsOutlets.map((o) => _fetchFeed(o.$1, _gnewsSiteUrl(o.$2))),
     ]);
     final seen = <String>{};
     final all = results
@@ -98,15 +81,6 @@ abstract final class NewsService {
         return b.pubDate!.compareTo(a.pubDate!);
       });
     return all;
-  }
-
-  /// News about one holiday, via Google News search (Indonesian edition).
-  /// Widens coverage well beyond the three fixed feeds.
-  static Future<List<NewsItem>> fetchHolidayNews(String holidayName) async {
-    final query = Uri.encodeComponent(holidayName);
-    final url =
-        'https://news.google.com/rss/search?q=$query&hl=id&gl=ID&ceid=ID:id';
-    return _fetchFeed('Google News', url);
   }
 
   static Future<List<NewsItem>> _fetchFeed(String source, String url) async {
@@ -148,18 +122,20 @@ abstract final class NewsService {
             ?.replaceAll('&amp;', '&');
       }
 
-      // Google News puts the real outlet in <source>.
-      final outlet = text('source') ?? fallbackSource;
-
       return NewsItem(
         title: _stripHtml(text('title') ?? ''),
         link: text('link') ?? text('guid') ?? '',
         description: rawDesc == null ? null : _stripHtml(rawDesc),
         imageUrl: image,
-        pubDate: _parseRfc822(text('pubDate')),
-        source: outlet,
+        pubDate: parseRfc822(text('pubDate')),
+        source: fallbackSource,
       );
-    }).where((n) => n.title.isNotEmpty && n.link.isNotEmpty).toList();
+    })
+        // Items without a banner image make the feed look broken and
+        // usually signal a low-quality entry — skip them entirely.
+        .where((n) =>
+            n.title.isNotEmpty && n.link.isNotEmpty && n.imageUrl != null)
+        .toList();
   }
 
   static String? _mediaContentUrl(XmlElement item) {
@@ -195,7 +171,8 @@ abstract final class NewsService {
 
   /// Parses RFC-822 dates as used by RSS
   /// ("Thu, 23 Jul 2026 20:26:20 +0700" / "... GMT"). Returns local time.
-  static DateTime? _parseRfc822(String? input) {
+  /// Public because other RSS consumers (BMKG nowcast) reuse it.
+  static DateTime? parseRfc822(String? input) {
     if (input == null) return null;
     final m = RegExp(
       r'(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([+-]\d{4}|[A-Za-z]{1,4})?',

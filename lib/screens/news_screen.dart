@@ -5,11 +5,12 @@ import '../services/api_service.dart';
 import '../services/news_service.dart';
 import '../services/news_storage.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 import 'news_detail_screen.dart';
 
-/// "Berita Hari Ini": aggregated Indonesian news. Coverage of today's
-/// holidays (from the calendar API) is searched more widely via Google
-/// News and pinned on top; the latest general feed follows below.
+/// "Berita Hari Ini": aggregated Indonesian news. General-feed items that
+/// mention today's holidays (from the calendar API) are pinned on top;
+/// the latest general feed follows below.
 class NewsScreen extends StatefulWidget {
   const NewsScreen({super.key});
 
@@ -31,12 +32,28 @@ class _NewsData {
 
 class _NewsScreenState extends State<NewsScreen> {
   final _api = ApiService();
-  late Future<_NewsData> _future;
+  _NewsData? _data;
+  bool _refreshing = false;
+  List<Holiday> _holidays = const [];
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _init();
+  }
+
+  /// Instant-first loading: the stored history renders immediately with no
+  /// network wait, then the feeds refresh in the background and the list
+  /// updates in place. The full-screen spinner only ever appears on the
+  /// very first open, when nothing is stored yet.
+  Future<void> _init() async {
+    _holidays = await _todaysHolidays();
+    final stored = await NewsStorage.load();
+    final visible = stored.where((n) => n.imageUrl != null).toList();
+    if (mounted && visible.isNotEmpty) {
+      setState(() => _data = _buildData(visible));
+    }
+    await _refresh();
   }
 
   Future<List<Holiday>> _todaysHolidays() async {
@@ -70,75 +87,58 @@ class _NewsScreenState extends State<NewsScreen> {
         .toList();
   }
 
-  Future<_NewsData> _load() async {
-    final holidays = await _todaysHolidays();
-
-    final holidayNewsFutures = holidays
-        .take(3)
-        .map((h) => NewsService.fetchHolidayNews(
-            h.name.replaceAll(RegExp(r'\s*\(.*?\)'), '')))
-        .toList();
-    final results = await Future.wait([
-      NewsService.fetchLatest(),
-      ...holidayNewsFutures,
-    ]);
-
-    // Persist everything fetched on this device; the returned merged list
-    // also restores older/offline items so the feed works without network.
-    final holidayFetched =
-        results.skip(1).expand((list) => list.take(8)).toList();
-    final latest = await NewsStorage.merge([
-      ...results.first,
-      ...holidayFetched,
-    ]);
-
-    final seen = <String>{};
+  /// Splits [latest] (newest-first, image-filtered) into the pinned
+  /// holiday section and the general list below it.
+  _NewsData _buildData(List<NewsItem> latest) {
+    // Pin general-feed items that mention today's holiday. `latest` is
+    // already sorted newest-first, so the pinned list inherits that order.
     final holidayNews = <NewsItem>[];
-    for (final item in holidayFetched) {
-      if (seen.add(item.link)) holidayNews.add(item);
-    }
-
-    // Also promote general-feed items that mention today's holiday.
-    if (holidays.isNotEmpty) {
-      final keywords = holidays.expand((h) => _keywords(h.name)).toSet();
+    if (_holidays.isNotEmpty) {
+      final keywords = _holidays.expand((h) => _keywords(h.name)).toSet();
       if (keywords.isNotEmpty) {
-        final matched = latest.where((n) {
+        holidayNews.addAll(latest.where((n) {
           final haystack =
               '${n.title} ${n.description ?? ''}'.toLowerCase();
           return keywords.any(haystack.contains);
-        }).toList();
-        for (final item in matched) {
-          if (seen.add(item.link)) holidayNews.insert(0, item);
-        }
+        }));
       }
     }
 
-    holidayNews.sort((a, b) {
-      if (a.pubDate == null && b.pubDate == null) return 0;
-      if (a.pubDate == null) return 1;
-      if (b.pubDate == null) return -1;
-      return b.pubDate!.compareTo(a.pubDate!);
-    });
-
     // Whatever ends up pinned in the holiday section must not repeat in
-    // the general list below (the merge put everything into `latest`).
+    // the general list below.
     final displayedHoliday = holidayNews.take(10).toList();
     final pinnedLinks = displayedHoliday.map((n) => n.link).toSet();
-    latest.removeWhere((n) => pinnedLinks.contains(n.link));
+    final general =
+        latest.where((n) => !pinnedLinks.contains(n.link)).toList();
 
     return _NewsData(
-      todaysHolidays: holidays,
+      todaysHolidays: _holidays,
       holidayNews: displayedHoliday,
       // The stored history can hold up to 500 items; rendering them all
       // eagerly would jank the list, so show a generous slice.
-      latestNews: latest.take(100).toList(),
+      latestNews: general.take(100).toList(),
     );
   }
 
+  /// Fetches the feeds, persists them, and swaps the fresher list in.
+  /// The already-rendered stored list stays on screen the whole time.
   Future<void> _refresh() async {
-    final fresh = _load();
-    setState(() => _future = fresh);
-    await fresh;
+    if (_refreshing) return;
+    _refreshing = true;
+    if (mounted) setState(() {});
+    try {
+      final merged =
+          await NewsStorage.merge(await NewsService.fetchLatest());
+      // Older stored items (and former Google News entries) may predate
+      // the banner-image requirement — only items with an image show.
+      final visible = merged.where((n) => n.imageUrl != null).toList();
+      if (mounted && visible.isNotEmpty) {
+        setState(() => _data = _buildData(visible));
+      }
+    } finally {
+      _refreshing = false;
+      if (mounted) setState(() {});
+    }
   }
 
   void _openDetail(NewsItem item) {
@@ -167,15 +167,16 @@ class _NewsScreenState extends State<NewsScreen> {
           ],
         ),
       ),
-      body: FutureBuilder<_NewsData>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final data = snapshot.data;
+      body: Builder(
+        builder: (context) {
+          final data = _data;
           if (data == null ||
               (data.holidayNews.isEmpty && data.latestNews.isEmpty)) {
+            // Nothing stored yet (very first open): spinner while the
+            // feeds load. Every later open renders instantly from storage.
+            if (_refreshing) {
+              return const Center(child: CircularProgressIndicator());
+            }
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -205,34 +206,49 @@ class _NewsScreenState extends State<NewsScreen> {
           }
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 24),
+            child: Stack(
               children: [
-                if (data.holidayNews.isNotEmpty) ...[
-                  _SectionHeader(
-                    icon: Icons.celebration_outlined,
-                    title: data.todaysHolidays.isEmpty
-                        ? 'Berita Utama'
-                        : data.todaysHolidays.map((h) => h.name).join(' • '),
-                    subtitle: 'Berita terkait hari penting hari ini',
-                  ),
-                  ...data.holidayNews.map(
-                    (n) => _FeaturedNewsCard(
-                      item: n,
-                      onTap: () => _openDetail(n),
+                ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    if (data.holidayNews.isNotEmpty) ...[
+                      _SectionHeader(
+                        icon: Icons.celebration_outlined,
+                        title: data.todaysHolidays.isEmpty
+                            ? 'Berita Utama'
+                            : data.todaysHolidays
+                                .map((h) => h.name)
+                                .join(' • '),
+                        subtitle: 'Berita terkait hari penting hari ini',
+                      ),
+                      ...data.holidayNews.map(
+                        (n) => _FeaturedNewsCard(
+                          item: n,
+                          onTap: () => _openDetail(n),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    _SectionHeader(
+                      icon: Icons.newspaper_outlined,
+                      title: 'Berita Terkini',
+                      subtitle:
+                          'CNN • Detik • Tempo • ANTARA & lainnya',
                     ),
+                    ...data.latestNews.map(
+                      (n) => _NewsTile(item: n, onTap: () => _openDetail(n)),
+                    ),
+                  ],
+                ),
+                // Slim bar while the background refresh is running — the
+                // stored list stays visible and usable beneath it.
+                if (_refreshing)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(minHeight: 2.5),
                   ),
-                  const SizedBox(height: 6),
-                ],
-                _SectionHeader(
-                  icon: Icons.newspaper_outlined,
-                  title: 'Berita Terkini',
-                  subtitle:
-                      'Kompas • Detik • CNN • Tempo • ANTARA & lainnya',
-                ),
-                ...data.latestNews.map(
-                  (n) => _NewsTile(item: n, onTap: () => _openDetail(n)),
-                ),
               ],
             ),
           );
@@ -329,12 +345,11 @@ class _FeaturedNewsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (item.imageUrl != null)
-              Image.network(
-                item.imageUrl!,
+              CachedImage(
+                url: item.imageUrl!,
                 width: double.infinity,
                 height: 170,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -448,13 +463,12 @@ class _NewsTile extends StatelessWidget {
               const SizedBox(width: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(9),
-                child: Image.network(
-                  item.imageUrl!,
+                child: CachedImage(
+                  url: item.imageUrl!,
                   width: 92,
                   height: 68,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) =>
-                      const SizedBox(width: 92, height: 68),
+                  error: const SizedBox(width: 92, height: 68),
                 ),
               ),
             ],

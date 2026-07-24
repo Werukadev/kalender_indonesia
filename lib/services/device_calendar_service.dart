@@ -46,7 +46,20 @@ class DeviceCalendarService {
   Future<List<Calendar>> _calendars() async {
     try {
       final result = await _plugin.retrieveCalendars();
-      return result.data?.toList() ?? const [];
+      // The plugin reports most failures through the Result object, not
+      // exceptions — surfacing them is the only way to see why a synced
+      // account's calendars are missing.
+      if (!result.isSuccess) {
+        debugPrint('DeviceCalendarService._calendars errors: '
+            '${result.errors.map((e) => e.errorMessage).join('; ')}');
+      }
+      final calendars = result.data?.toList() ?? const <Calendar>[];
+      for (final c in calendars) {
+        debugPrint('DeviceCalendarService: calendar "${c.name}" '
+            'account="${c.accountName}" type="${c.accountType}" '
+            'id=${c.id}');
+      }
+      return calendars;
     } catch (e) {
       debugPrint('DeviceCalendarService._calendars failed: $e');
       return const [];
@@ -73,6 +86,11 @@ class DeviceCalendarService {
       if (cal.id == null) continue;
       try {
         final result = await _plugin.retrieveEvents(cal.id, params);
+        if (!result.isSuccess) {
+          debugPrint('DeviceCalendarService.listEvents: calendar '
+              '"${cal.name}" returned errors: '
+              '${result.errors.map((e) => e.errorMessage).join('; ')}');
+        }
         for (final e in result.data ?? const <Event>[]) {
           if (e.eventId == null) continue;
           events.add(

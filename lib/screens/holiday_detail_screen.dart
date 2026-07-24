@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/holiday.dart';
 import '../services/wikipedia_service.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 
 const kTypeColors = {
   HolidayType.liburNasional: Color(0xFFE53935),
@@ -56,11 +57,10 @@ class _HolidayDetailScreenState extends State<HolidayDetailScreen> {
         padding: EdgeInsets.zero,
         children: [
           if (h.imageUrl != null)
-            Image.network(
-              h.imageUrl!,
+            CachedImage(
+              url: h.imageUrl!,
               width: double.infinity,
               fit: BoxFit.fitWidth,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),

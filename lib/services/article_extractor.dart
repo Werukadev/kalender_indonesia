@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
+import 'offline_cache.dart';
 
 class ExtractedArticle {
   final String? title;
@@ -19,6 +20,21 @@ class ExtractedArticle {
     this.title,
     this.imageUrl,
   });
+
+  Map<String, dynamic> toJson() => {
+        'resolvedUrl': resolvedUrl,
+        'paragraphs': paragraphs,
+        if (title != null) 'title': title,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+      };
+
+  factory ExtractedArticle.fromJson(Map<String, dynamic> json) =>
+      ExtractedArticle(
+        paragraphs: (json['paragraphs'] as List<dynamic>).cast<String>(),
+        resolvedUrl: json['resolvedUrl'] as String,
+        title: json['title'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+      );
 }
 
 /// Fetches a news page and pulls out its readable content — a small
@@ -34,7 +50,27 @@ abstract final class ArticleExtractor {
     caseSensitive: false,
   );
 
+  static const _cacheNs = 'news_articles';
+
+  /// Extracts the article, preferring a fresh fetch. Every successful
+  /// extraction is stored via [OfflineCache], so an article read once
+  /// stays readable offline (or when the source site later breaks).
   static Future<ExtractedArticle?> extract(String url) async {
+    final fresh = await _extractFresh(url);
+    if (fresh != null) {
+      OfflineCache.putJson(_cacheNs, url, fresh.toJson());
+      return fresh;
+    }
+    final cached = await OfflineCache.getJson(_cacheNs, url);
+    if (cached is Map<String, dynamic>) {
+      try {
+        return ExtractedArticle.fromJson(cached);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static Future<ExtractedArticle?> _extractFresh(String url) async {
     try {
       var resp = await http
           .get(Uri.parse(url), headers: _headers)
@@ -72,7 +108,12 @@ abstract final class ArticleExtractor {
           doc.querySelector('meta[name="$property"]')?.attributes['content'];
 
       final paragraphs = _extractParagraphs(doc);
-      if (paragraphs.isEmpty) return null;
+      // A thin body (a teaser sentence or two) reads as a broken article —
+      // treat it as a failed extraction so callers fall back to the source
+      // link instead of presenting it as the story.
+      final bodyLength =
+          paragraphs.fold<int>(0, (sum, p) => sum + p.length);
+      if (paragraphs.length < 2 || bodyLength < 400) return null;
 
       return ExtractedArticle(
         title: meta('og:title') ?? doc.querySelector('h1')?.text.trim(),

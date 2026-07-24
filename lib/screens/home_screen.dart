@@ -15,6 +15,7 @@ import '../widgets/batik.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/event_list.dart';
 import 'about_screen.dart';
+import 'bmkg_screen.dart';
 import 'encyclopedia_screen.dart';
 import 'jelajah_hari_screen.dart';
 import 'news_screen.dart';
@@ -66,6 +67,9 @@ class _HomeScreenState extends State<HomeScreen> {
       enabled: true,
       visibleTypes: settings.visibleTypes,
     );
+    // BMKG alerts (new significant quake / weather warning) — also
+    // fire-and-forget, deduplicated inside.
+    NotificationService.checkBmkgAlerts();
   }
 
   void _loadDeviceEvents() {
@@ -875,6 +879,18 @@ class _AppDrawer extends StatelessWidget {
                         ),
                         onTap: () =>
                             _openPage(context, const EncyclopediaScreen()),
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          Icons.crisis_alert,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Info BMKG'),
+                        subtitle: const Text(
+                          'Gempa terbaru, dirasakan & magnitudo 5+',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onTap: () => _openPage(context, const BmkgScreen()),
                       ),
                     ],
                   ),

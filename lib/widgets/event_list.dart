@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
 import '../services/device_calendar_service.dart';
+import 'cached_image.dart';
 
 /// Shows only [selectedDate]'s events — showing a whole month at once was
 /// too much to scan, so the calendar grid picks the day and this just
@@ -75,7 +76,21 @@ class EventList extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _EventDetailSheet(entry: entry, day: selectedDate),
+      // DraggableScrollableSheet + the provided controller lets a
+      // downward drag anywhere on the (scrollable) content dismiss the
+      // sheet — with a bare SingleChildScrollView the scrollable eats the
+      // gesture and only the tiny handle area could close it.
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.35,
+        maxChildSize: 0.94,
+        builder: (ctx, scrollController) => _EventDetailSheet(
+          entry: entry,
+          day: selectedDate,
+          scrollController: scrollController,
+        ),
+      ),
     );
   }
 
@@ -295,8 +310,13 @@ class _EventTile extends StatelessWidget {
 class _EventDetailSheet extends StatefulWidget {
   final _Entry entry;
   final DateTime day;
+  final ScrollController scrollController;
 
-  const _EventDetailSheet({required this.entry, required this.day});
+  const _EventDetailSheet({
+    required this.entry,
+    required this.day,
+    required this.scrollController,
+  });
 
   @override
   State<_EventDetailSheet> createState() => _EventDetailSheetState();
@@ -318,6 +338,12 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
     return '$startStr – $endStr';
   }
 
+  /// Promo footer appended to every shared content.
+  static const _shareFooter =
+      '📅 Dibagikan dari aplikasi Kalender Indonesia\n'
+      'Unduh gratis di Play Store:\n'
+      'https://play.google.com/store/apps/details?id=cal.weruka.dev';
+
   String _shareText() {
     final dateLabel = DateFormat('EEEE, d MMMM yyyy', 'id').format(widget.day);
     final desc = entry.description?.trim();
@@ -325,6 +351,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
       '${entry.name} — $dateLabel',
       if (desc != null && desc.isNotEmpty) '',
       if (desc != null && desc.isNotEmpty) desc,
+      '',
+      _shareFooter,
     ].join('\n');
   }
 
@@ -385,6 +413,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: SingleChildScrollView(
+          controller: widget.scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,26 +463,20 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                   borderRadius: BorderRadius.circular(12),
                   // No fixed height: the preview keeps the image's own
                   // aspect ratio, scaled to the sheet's width.
-                  child: Image.network(
-                    entry.imageUrl!,
+                  child: CachedImage(
+                    url: entry.imageUrl!,
                     width: double.infinity,
                     fit: BoxFit.fitWidth,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        height: 160,
-                        color: colorScheme.onSurface.withValues(alpha: 0.05),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: colorScheme.primary,
-                          ),
+                    loading: Container(
+                      height: 160,
+                      color: colorScheme.onSurface.withValues(alpha: 0.05),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: colorScheme.primary,
                         ),
-                      );
-                    },
-                    // Broken image URL: hide the image area entirely.
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox.shrink(),
+                      ),
+                    ),
                   ),
                 ),
               ],

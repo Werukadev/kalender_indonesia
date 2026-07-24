@@ -5,6 +5,7 @@ import '../models/holiday.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 import 'holiday_detail_screen.dart';
 
 /// "Jelajah Hari": every holiday of the current year as a scrollable feed.
@@ -282,25 +283,21 @@ class _FeedCard extends StatelessWidget {
             ),
             // Post media: API image, or a colored placeholder banner.
             if (holiday.imageUrl != null)
-              Image.network(
-                holiday.imageUrl!,
+              CachedImage(
+                url: holiday.imageUrl!,
                 width: double.infinity,
                 fit: BoxFit.fitWidth,
-                errorBuilder: (_, _, _) =>
-                    _PlaceholderBanner(color: typeColor),
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    height: 140,
-                    color: colorScheme.onSurface.withValues(alpha: 0.05),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: colorScheme.primary,
-                      ),
+                error: _PlaceholderBanner(color: typeColor),
+                loading: Container(
+                  height: 140,
+                  color: colorScheme.onSurface.withValues(alpha: 0.05),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: colorScheme.primary,
                     ),
-                  );
-                },
+                  ),
+                ),
               )
             else
               _PlaceholderBanner(color: typeColor),

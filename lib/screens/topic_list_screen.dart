@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/wikipedia_service.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 import 'article_screen.dart';
 
 /// Article list for one encyclopedia subtopic — search results from the
@@ -76,6 +77,10 @@ class _TopicListScreenState extends State<TopicListScreen> {
               autofocus: widget.initialQuery.isEmpty,
               decoration: InputDecoration(
                 hintText: 'Cari artikel...',
+                hintStyle: TextStyle(
+                  fontSize: 13.5,
+                  color: colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchCtrl.text.isEmpty
                     ? null
@@ -87,19 +92,13 @@ class _TopicListScreenState extends State<TopicListScreen> {
                         },
                       ),
                 isDense: true,
+                filled: true,
+                fillColor: colorScheme.onSurface.withValues(alpha: 0.05),
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.onSurface.withValues(alpha: 0.15),
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.onSurface.withValues(alpha: 0.15),
-                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
@@ -144,80 +143,88 @@ class _TopicListScreenState extends State<TopicListScreen> {
             ),
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
           itemCount: items.length,
-          separatorBuilder: (_, _) => Divider(
-            height: 1,
-            thickness: 0.5,
-            color: colorScheme.onSurface.withValues(alpha: 0.08),
-          ),
           itemBuilder: (context, i) {
             final item = items[i];
-            return InkWell(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ArticleScreen(title: item.title),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ArticleScreen(title: item.title),
+                  ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        width: 52,
-                        height: 52,
-                        child: item.thumbnailUrl != null
-                            ? Image.network(
-                                item.thumbnailUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    _thumbFallback(colorScheme),
-                              )
-                            : _thumbFallback(colorScheme),
-                      ),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: colorScheme.onSurface.withValues(alpha: 0.08),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              height: 1.25,
-                            ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: item.thumbnailUrl != null
+                                ? CachedImage(
+                                    url: item.thumbnailUrl!,
+                                    fit: BoxFit.cover,
+                                    error: _thumbFallback(colorScheme),
+                                  )
+                                : _thumbFallback(colorScheme),
                           ),
-                          if (item.description != null &&
-                              item.description!.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              item.description!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.55),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.25,
+                                ),
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
+                              if (item.description != null &&
+                                  item.description!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.description!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurface
+                                        .withValues(alpha: 0.55),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color:
+                              colorScheme.onSurface.withValues(alpha: 0.25),
+                        ),
+                      ],
                     ),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: colorScheme.onSurface.withValues(alpha: 0.25),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );

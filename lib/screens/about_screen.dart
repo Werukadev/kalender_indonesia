@@ -164,8 +164,7 @@ class _AboutScreenState extends State<AboutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Berita diambil dari RSS resmi media berikut, serta '
-                  'Google News RSS sebagai pelengkap:',
+                  'Berita diambil dari RSS resmi media berikut:',
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.4,
@@ -179,7 +178,6 @@ class _AboutScreenState extends State<AboutScreen> {
                   children: [
                     for (final source in const [
                       'CNN Indonesia',
-                      'Kompas.com',
                       'Detik',
                       'Tempo',
                       'ANTARA News',
@@ -187,17 +185,9 @@ class _AboutScreenState extends State<AboutScreen> {
                       'SINDOnews',
                       'Kumparan',
                       'VOI.id',
-                      'VIVA.co.id',
-                      'JPNN',
-                      'Republika',
-                      'Tirto.id',
                       'Mongabay Indonesia',
                       'BBC Indonesia',
-                      'DW Indonesia',
-                      'CNA Indonesia',
-                      'The Jakarta Post',
                       'Bloomberg Technoz',
-                      'Google News',
                     ])
                       Container(
                         padding: const EdgeInsets.symmetric(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/wikipedia_service.dart';
 import '../widgets/batik.dart';
+import '../widgets/cached_image.dart';
 
 /// Reader page for one Wikipedia article: hero image, lead description,
 /// full body text with section headings, and a link to the source page.
@@ -47,13 +48,29 @@ class _ArticleScreenState extends State<ArticleScreen> {
       if (heading != null) {
         final isTop = heading.group(1)!.length == 2;
         widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 18, bottom: 6),
-          child: Text(
-            heading.group(2)!,
-            style: TextStyle(
-              fontSize: isTop ? 16.5 : 14.5,
-              fontWeight: FontWeight.bold,
-            ),
+          padding: const EdgeInsets.only(top: 20, bottom: 8),
+          child: Row(
+            children: [
+              if (isTop)
+                Container(
+                  width: 3.5,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              Expanded(
+                child: Text(
+                  heading.group(2)!,
+                  style: TextStyle(
+                    fontSize: isTop ? 16.5 : 14.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
         ));
       } else {
@@ -97,12 +114,17 @@ class _ArticleScreenState extends State<ArticleScreen> {
             padding: EdgeInsets.zero,
             children: [
               if (summary?.thumbnailUrl != null)
-                Image.network(
-                  summary!.thumbnailUrl!,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: CachedImage(
+                      url: summary!.thumbnailUrl!,
+                      width: double.infinity,
+                      height: 200,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
@@ -146,37 +168,16 @@ class _ArticleScreenState extends State<ArticleScreen> {
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     if (summary?.pageUrl != null)
-                      InkWell(
-                        onTap: () => _openUrl(summary!.pageUrl!),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.open_in_new_rounded,
-                                size: 14,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Baca selengkapnya di Wikipedia',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: colorScheme.primary,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: colorScheme.primary
-                                      .withValues(alpha: 0.4),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: () => _openUrl(summary!.pageUrl!),
+                        icon:
+                            const Icon(Icons.open_in_new_rounded, size: 15),
+                        label:
+                            const Text('Baca selengkapnya di Wikipedia'),
                       ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Text(
                       'Sumber: Wikipedia bahasa Indonesia',
                       style: TextStyle(
