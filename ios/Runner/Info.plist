@@ -24,18 +24,18 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Kalender Indonesia menampilkan event dari kalender perangkat Anda di dalam kalender.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Kalender Indonesia menampilkan event dari kalender perangkat Anda di dalam kalender.</string>
+	<key>NSCalendarsUsageDescription</key>
 	<string>Kalender Indonesia menampilkan event dari kalender perangkat Anda di dalam kalender.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokasi digunakan untuk menampilkan prakiraan cuaca BMKG dan cuaca maritim di sekitar posisi Anda. Lokasi tidak disimpan maupun dibagikan.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Diperlukan untuk menyimpan foto dan video dari Galeri Nusantara ke galeri perangkat Anda.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -66,15 +66,13 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 </dict>
 </plist>
