@@ -4,6 +4,20 @@
 
 ### ✨ Fitur Baru
 
+**📸 Galeri Nusantara** — menu baru di drawer
+
+- Feed foto & video ala Instagram seputar Indonesia (Pexels): budaya,
+  tarian, alam, kuliner, kota, dan hari besar hari ini.
+- **Selalu berbeda setiap dibuka atau di-refresh** — 60+ tema diacak
+  plus halaman hasil acak, terasa selalu up to date.
+- Pencarian bebas, scroll tanpa batas, dan mode offline (galeri terakhir
+  tetap tampil).
+- Tap media untuk layar penuh: **geser kanan/kiri** antar konten, foto
+  bisa di-zoom, video diputar dengan kontrol.
+- **Bagikan** (konten dikirim sebagai file foto/video, dengan caption &
+  info aplikasi) dan **Unduh** ke galeri perangkat (album "Kalender
+  Indonesia").
+
 **🌦️ Info BMKG** — menu baru di drawer
 
 - **Prakiraan cuaca otomatis dari lokasi Anda (GPS)** — suhu, kondisi,
@@ -30,9 +44,9 @@
 
 **📖 Ensiklopedia Indonesia**
 
-- Tampilan baru yang lebih modern: hero pencarian bergradien batik,
-  kartu kategori dengan ilustrasi khas untuk seluruh 14 kategori, dan
-  halaman artikel yang lebih rapi.
+- Tampilan baru yang lebih modern dan ringkas: hero pencarian bergradien
+  batik, daftar kategori compact dengan warna aksen, ilustrasi khas di
+  halaman tiap kategori, dan halaman artikel yang lebih rapi.
 - Artikel rintisan (stub) dengan isi terlalu sedikit tidak lagi
   ditampilkan di hasil pencarian.
 
@@ -60,6 +74,8 @@
 - Diagnostik kalender perangkat diperbaiki untuk membantu menelusuri
   akun yang tidak muncul (mis. Outlook memerlukan "Sinkronkan kalender"
   diaktifkan di aplikasinya).
+- Halaman Tentang diperbarui: mencantumkan sumber data BMKG dan Pexels
+  beserta atribusinya.
 
 ### 🐛 Perbaikan Bug
 
@@ -69,15 +85,18 @@
   muncul di daftar.
 - Event kalender perangkat: kegagalan baca per-kalender kini tercatat
   dan tidak menghilangkan kalender lain.
+- Tema Midnight: motif batik tidak lagi membayang ke body drawer dan
+  grid kalender (body drawer kini opak penuh, motif header di-clip
+  rapi).
 
 ---
 
 ### Teks singkat untuk Google Play (≤500 karakter)
 
 ```
-✨ Baru: Info BMKG — prakiraan cuaca otomatis dari lokasi Anda, peringatan dini cuaca, cuaca maritim, dan info gempa terkini + notifikasinya.
-📴 Mode offline: semua yang pernah dibuka (berita, ensiklopedia, gambar) tetap bisa diakses tanpa internet.
-📖 Ensiklopedia tampil lebih modern dengan ilustrasi kategori.
-📰 Berita terbuka seketika, kurasi lebih berkualitas.
-🔔 Notifikasi hari besar dijamin muncul di hari-H, dengan nama & gambar.
+✨ Baru: Galeri Nusantara — feed foto & video Indonesia yang selalu baru, bisa dibagikan & diunduh.
+✨ Baru: Info BMKG — cuaca dari lokasi Anda, peringatan dini, cuaca maritim & info gempa + notifikasi.
+📴 Mode offline: semua yang pernah dibuka tetap bisa diakses tanpa internet.
+📖 Ensiklopedia lebih modern & ringkas, 📰 berita terbuka seketika.
+🔔 Notifikasi hari besar dijamin muncul di hari-H dengan nama & gambar.
 ```

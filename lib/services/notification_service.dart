@@ -1,5 +1,8 @@
+import 'dart:io' show Directory, File, Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../models/holiday.dart';
@@ -34,22 +37,44 @@ abstract final class NotificationService {
     if (_initialized) return;
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      // Apple standard: don't prompt at init — permission is requested
+      // explicitly (and in context) via requestPermission().
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      ),
     );
     await _plugin.initialize(settings: settings);
     _initialized = true;
   }
 
-  /// Asks for POST_NOTIFICATIONS (Android 13+). Exact-alarm permission is
-  /// auto-granted via USE_EXACT_ALARM for calendar apps.
+  /// Asks for notification permission: POST_NOTIFICATIONS on Android 13+
+  /// (exact-alarm permission is auto-granted via USE_EXACT_ALARM for
+  /// calendar apps), and the standard alert/badge/sound prompt on iOS.
   static Future<bool> requestPermission() async {
     await initialize();
     final android = _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
-    if (android == null) return true;
-    final granted = await android.requestNotificationsPermission();
-    return granted ?? true;
+    if (android != null) {
+      final granted = await android.requestNotificationsPermission();
+      return granted ?? true;
+    }
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+    if (ios != null) {
+      final granted = await ios.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return granted ?? true;
+    }
+    return true;
   }
 
   /// Cancels every *scheduled* reminder. Deliberately leaves already-shown
@@ -85,7 +110,10 @@ abstract final class NotificationService {
         body:
             'Pengingat hari penting akan muncul seperti ini '
             'lewat tengah malam pada tanggalnya.',
-        notificationDetails: const NotificationDetails(android: androidDetails),
+        notificationDetails: const NotificationDetails(
+          android: androidDetails,
+          iOS: DarwinNotificationDetails(),
+        ),
       );
       debugPrint('NotificationService: test notification show() completed');
     } catch (e, st) {
@@ -187,7 +215,9 @@ abstract final class NotificationService {
 
       // If a holiday that day has an image, attach it as a big picture
       // (plus a thumbnail while collapsed).
+      final id = _idForDate(date);
       final imagePath = await _downloadImage(items);
+      final iosAttachment = await _attachmentCopy(imagePath, id);
 
       final androidDetails = AndroidNotificationDetails(
         _channelId,
@@ -205,8 +235,15 @@ abstract final class NotificationService {
               )
             : BigTextStyleInformation(bigText, contentTitle: title),
       );
-      final details = NotificationDetails(android: androidDetails);
-      final id = _idForDate(date);
+      final iosDetails = DarwinNotificationDetails(
+        attachments: iosAttachment == null
+            ? null
+            : [DarwinNotificationAttachment(iosAttachment)],
+      );
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
 
       if (!when.isAfter(now)) {
         // 00:05 already passed. For today that must not mean silence —
@@ -283,7 +320,10 @@ abstract final class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
       );
-      const details = NotificationDetails(android: androidDetails);
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(),
+      );
 
       // 1) Significant earthquake.
       final quake = await BmkgService.latestQuake();
@@ -372,6 +412,25 @@ abstract final class NotificationService {
       await prefs.setString(_lastCatchUpKey, todayKey);
     } catch (e) {
       debugPrint('NotificationService: catch-up failed: $e');
+    }
+  }
+
+  /// iOS only: copy the image for use as a notification attachment.
+  /// UNNotificationAttachment MOVES the file into the system's attachment
+  /// store on delivery — handing it the shared [OfflineCache] file would
+  /// silently delete the image the app itself still displays.
+  static Future<String?> _attachmentCopy(String? imagePath, int id) async {
+    if (imagePath == null || !Platform.isIOS) return null;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final folder = Directory('${dir.path}/notif_attachments');
+      if (!await folder.exists()) await folder.create(recursive: true);
+      final target = File('${folder.path}/$id.jpg');
+      if (await target.exists()) await target.delete();
+      await File(imagePath).copy(target.path);
+      return target.path;
+    } catch (_) {
+      return null;
     }
   }
 
