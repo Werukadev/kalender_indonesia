@@ -114,8 +114,9 @@ class _AboutScreenState extends State<AboutScreen> {
               'Aplikasi kalender Indonesia yang menampilkan informasi '
               'hari libur nasional, cuti bersama, hari besar nasional, '
               'dan hari besar internasional secara lengkap — dilengkapi '
-              'pasaran Jawa, pengingat hari penting, serta sejarah '
-              'setiap peringatan.',
+              'pasaran Jawa, pengingat hari penting, sejarah setiap '
+              'peringatan, info cuaca & gempa BMKG, berita, ensiklopedia, '
+              'serta galeri foto & video Nusantara.',
               style: TextStyle(
                 fontSize: 13,
                 height: 1.55,
@@ -151,6 +152,31 @@ class _AboutScreenState extends State<AboutScreen> {
                   label: 'id.wikipedia.org (ensiklopedia & artikel)',
                   colorScheme: colorScheme,
                   onTap: () => _openUrl('https://id.wikipedia.org'),
+                ),
+                const SizedBox(height: 4),
+                _UrlTile(
+                  label: 'BMKG — data.bmkg.go.id (cuaca, gempa, '
+                      'peringatan dini & maritim)',
+                  colorScheme: colorScheme,
+                  onTap: () => _openUrl('https://data.bmkg.go.id'),
+                ),
+                const SizedBox(height: 4),
+                _UrlTile(
+                  label: 'Pexels — foto & video Galeri Nusantara',
+                  colorScheme: colorScheme,
+                  onTap: () => _openUrl('https://www.pexels.com'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Data cuaca & gempa © Badan Meteorologi, Klimatologi, '
+                  'dan Geofisika (BMKG). Foto & video galeri adalah karya '
+                  'para kreator Pexels, hak cipta pada masing-masing '
+                  'kreator.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.45,
+                    color: colorScheme.onSurface.withValues(alpha: 0.45),
+                  ),
                 ),
               ],
             ),

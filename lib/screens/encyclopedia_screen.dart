@@ -3,9 +3,9 @@ import '../data/encyclopedia_topics.dart';
 import '../widgets/batik.dart';
 import 'topic_list_screen.dart';
 
-/// "Ensiklopedia Indonesia" hub: a gradient search hero plus a grid of
-/// themed categories (Budaya, Sejarah, Geografi, ...). Each category opens
-/// its subtopics; each subtopic lists Wikipedia articles.
+/// "Ensiklopedia Indonesia" hub: a gradient search hero plus a compact
+/// list of themed categories (Budaya, Sejarah, Geografi, ...). Each
+/// category opens its subtopics; each subtopic lists Wikipedia articles.
 class EncyclopediaScreen extends StatelessWidget {
   const EncyclopediaScreen({super.key});
 
@@ -55,24 +55,11 @@ class EncyclopediaScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            // Without this the grid inherits ambient MediaQuery padding,
-            // opening a large gap below the header row.
-            padding: EdgeInsets.zero,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.08,
-            ),
-            itemCount: kEncyclopediaCategories.length,
-            itemBuilder: (context, i) => _CategoryCard(
+          for (var i = 0; i < kEncyclopediaCategories.length; i++)
+            _CategoryRow(
               category: kEncyclopediaCategories[i],
               accent: accentFor(i),
             ),
-          ),
         ],
       ),
     );
@@ -165,168 +152,93 @@ class _SearchHero extends StatelessWidget {
   }
 }
 
-class _CategoryCard extends StatelessWidget {
+/// Compact list row for one category: emoji in an accent-tinted box, the
+/// category name, topic count, and a chevron. No imagery — kept dense so
+/// all categories fit on screen with little scrolling.
+class _CategoryRow extends StatelessWidget {
   final EncyclopediaCategory category;
   final Color accent;
 
-  const _CategoryCard({required this.category, required this.accent});
-
-  void _open(BuildContext context) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => CategoryScreen(category: category, accent: accent),
-    ),
-  );
+  const _CategoryRow({required this.category, required this.accent});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final image = category.imageAsset;
-    if (image != null) return _imageCard(context, image);
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => _open(context),
-      child: Ink(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: accent.withValues(alpha: 0.22)),
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: 0.10),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryScreen(category: category, accent: accent),
+          ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  category.emoji,
-                  style: const TextStyle(fontSize: 20),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                category.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${category.subtopics.length} topik',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: colorScheme.onSurface.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    category.emoji,
+                    style: const TextStyle(fontSize: 19),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Card variant with the category illustration as background. The name
-  /// and badge sit on a translucent dark caption bar (plus a soft scrim
-  /// above it) so they stay readable over any artwork, light or busy.
-  Widget _imageCard(BuildContext context, String image) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(image, fit: BoxFit.cover),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: [0.35, 1],
-                colors: [Colors.transparent, Colors.black45],
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(11, 8, 11, 10),
-              color: Colors.black.withValues(alpha: 0.3),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
                     category.name,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      height: 1.25,
-                      shadows: [Shadow(color: Colors.black87, blurRadius: 4)],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${category.subtopics.length} topik',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${category.subtopics.length} topik',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: accent,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: colorScheme.onSurface.withValues(alpha: 0.25),
+                ),
+              ],
             ),
           ),
-          // Ripple layer on top so taps still give feedback over the image.
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _open(context),
-              splashColor: Colors.white24,
-              highlightColor: Colors.white10,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

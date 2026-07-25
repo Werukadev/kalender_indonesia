@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -17,6 +15,7 @@ import '../widgets/event_list.dart';
 import 'about_screen.dart';
 import 'bmkg_screen.dart';
 import 'encyclopedia_screen.dart';
+import 'galeri_screen.dart';
 import 'jelajah_hari_screen.dart';
 import 'news_screen.dart';
 import 'settings_screen.dart';
@@ -684,6 +683,9 @@ class _MonthHeader extends StatelessWidget {
     // Container paints the color behind the status bar too (edge-to-edge,
     // no separate AppBar); SafeArea only pads the row content below it.
     return Container(
+      // The kawung painter intentionally overdraws past its bounds; clip
+      // so it can't bleed onto the calendar below (visible on Midnight).
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         gradient: batikGradient(headerColor),
         border: Border(bottom: batikEdgeSide),
@@ -781,152 +783,160 @@ class _AppDrawer extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: ClipRRect(
         borderRadius: const BorderRadius.horizontal(right: Radius.circular(18)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(
-            // Translucent surface over the blurred page behind = glass.
-            // Dark themes get a more opaque pane so the batik behind
-            // doesn't bleed into the menu and blur the header boundary.
-            color: colorScheme.surface.withValues(
-              alpha: Theme.of(context).brightness == Brightness.dark
-                  ? 0.95
-                  : 0.86,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  height: headerHeight,
-                  decoration: BoxDecoration(
-                    gradient: batikGradient(headerColor),
-                    border: Border(bottom: batikEdgeSide),
-                  ),
-                  child: CustomPaint(
-                    painter: const BatikKawungPainter(),
-                    child: Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // "Kalender" in Javanese script (aksara Jawa).
-                            const Text(
-                              'ꦏꦭꦺꦤ꧀ꦢꦺꦂ',
-                              style: TextStyle(
-                                fontFamily: 'NotoSansJavanese',
-                                color: Colors.white,
-                                fontSize: 34,
-                                height: 1.2,
-                              ),
+        child: Container(
+          // Fully opaque: any translucency here lets the batik-patterned
+          // calendar header behind the drawer bleed through, which is
+          // glaring on near-black themes (Midnight).
+          color: colorScheme.surface,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: headerHeight,
+                // Clip the painter's intentional overdraw — otherwise the
+                // motif bleeds onto the drawer body, glaring on Midnight.
+                clipBehavior: Clip.hardEdge,
+                decoration: BoxDecoration(
+                  gradient: batikGradient(headerColor),
+                  border: Border(bottom: batikEdgeSide),
+                ),
+                child: CustomPaint(
+                  painter: const BatikKawungPainter(),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // "Kalender" in Javanese script (aksara Jawa).
+                          const Text(
+                            'ꦏꦭꦺꦤ꧀ꦢꦺꦂ',
+                            style: TextStyle(
+                              fontFamily: 'NotoSansJavanese',
+                              color: Colors.white,
+                              fontSize: 34,
+                              height: 1.2,
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'KALENDER INDONESIA',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 3.2,
-                              ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'KALENDER INDONESIA',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 3.2,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                // Scrollable main menu area.
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(top: 8),
-                    children: [
-                      ListTile(
-                        leading: Icon(
-                          Icons.auto_stories_outlined,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Jelajah Hari'),
-                        subtitle: const Text(
-                          'Jelajahi semua hari penting',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                        onTap: () =>
-                            _openPage(context, const JelajahHariScreen()),
+              ),
+              // Scrollable main menu area.
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.only(top: 8),
+                  children: [
+                    ListTile(
+                      leading: Icon(
+                        Icons.auto_stories_outlined,
+                        color: colorScheme.primary,
                       ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.newspaper_outlined,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Berita Hari Ini'),
-                        subtitle: const Text(
-                          'Berita terkini & hari penting hari ini',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                        onTap: () => _openPage(context, const NewsScreen()),
+                      title: const Text('Jelajah Hari'),
+                      subtitle: const Text(
+                        'Jelajahi semua hari penting',
+                        style: TextStyle(fontSize: 11.5),
                       ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.menu_book_outlined,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Ensiklopedia Indonesia'),
-                        subtitle: const Text(
-                          'Budaya, sejarah, geografi & lainnya',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                        onTap: () =>
-                            _openPage(context, const EncyclopediaScreen()),
+                      onTap: () =>
+                          _openPage(context, const JelajahHariScreen()),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.newspaper_outlined,
+                        color: colorScheme.primary,
                       ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.crisis_alert,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Info BMKG'),
-                        subtitle: const Text(
-                          'Gempa terbaru, dirasakan & magnitudo 5+',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                        onTap: () => _openPage(context, const BmkgScreen()),
+                      title: const Text('Berita Hari Ini'),
+                      subtitle: const Text(
+                        'Berita terkini & hari penting hari ini',
+                        style: TextStyle(fontSize: 11.5),
                       ),
-                    ],
-                  ),
+                      onTap: () => _openPage(context, const NewsScreen()),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.menu_book_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Ensiklopedia Indonesia'),
+                      subtitle: const Text(
+                        'Budaya, sejarah, geografi & lainnya',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      onTap: () =>
+                          _openPage(context, const EncyclopediaScreen()),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.crisis_alert,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Info BMKG'),
+                      subtitle: const Text(
+                        'Gempa terbaru, dirasakan & magnitudo 5+',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      onTap: () => _openPage(context, const BmkgScreen()),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.photo_library_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Galeri Nusantara'),
+                      subtitle: const Text(
+                        'Foto & video Indonesia yang selalu baru',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      onTap: () => _openPage(context, const GaleriScreen()),
+                    ),
+                  ],
                 ),
-                // Sticky bottom section: Pengaturan & Tentang.
-                Divider(
-                  height: 1,
-                  thickness: 0.5,
-                  color: colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ListTile(
-                        leading: Icon(
-                          Icons.settings_outlined,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Pengaturan'),
-                        onTap: () => _openPage(context, const SettingsScreen()),
+              ),
+              // Sticky bottom section: Pengaturan & Tentang.
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+              ),
+              SafeArea(
+                top: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ListTile(
+                      leading: Icon(
+                        Icons.settings_outlined,
+                        color: colorScheme.primary,
                       ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.info_outline_rounded,
-                          color: colorScheme.primary,
-                        ),
-                        title: const Text('Tentang'),
-                        onTap: () => _openPage(context, const AboutScreen()),
+                      title: const Text('Pengaturan'),
+                      onTap: () => _openPage(context, const SettingsScreen()),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.info_outline_rounded,
+                        color: colorScheme.primary,
                       ),
-                    ],
-                  ),
+                      title: const Text('Tentang'),
+                      onTap: () => _openPage(context, const AboutScreen()),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

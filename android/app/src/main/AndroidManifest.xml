@@ -27,6 +27,12 @@
          FINE is declared so Android 12+ can offer the precise option. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Galeri Nusantara "Unduh": saving media to the gallery (gal) only
+         needs this legacy permission up to Android 10 (API 29). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
     <application
         android:label="Kalender Indonesia"
         android:name="${applicationName}"
