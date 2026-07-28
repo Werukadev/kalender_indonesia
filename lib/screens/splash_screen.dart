@@ -16,6 +16,7 @@ class _SplashScreenState extends State<SplashScreen> {
   double _progress = 0;
   String _statusLabel = '';
   bool _isDownloading = false;
+  bool _showPrompt = false;
 
   @override
   void initState() {
@@ -32,7 +33,16 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    setState(() => _isDownloading = true);
+    // App Store guideline 4.2.3(ii): disclose the download size and let the
+    // user choose before fetching additional resources.
+    setState(() => _showPrompt = true);
+  }
+
+  Future<void> _startDownload() async {
+    setState(() {
+      _showPrompt = false;
+      _isDownloading = true;
+    });
 
     final now = DateTime.now();
     await for (final p in _preload.prefetch([now.year, now.year + 1])) {
@@ -44,6 +54,11 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     await PreloadService.markDone();
+    if (mounted) _goHome();
+  }
+
+  Future<void> _skipDownload() async {
+    await PreloadService.markSkipped();
     if (mounted) _goHome();
   }
 
@@ -101,6 +116,94 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
               ),
             ),
+
+            // ── Download consent prompt ─────────────────────────────────────
+            if (_showPrompt)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: colorScheme.primary.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.cloud_download_outlined,
+                            size: 18,
+                            color: colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Unduh Data Kalender',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Aplikasi dapat mengunduh data hari libur & hari besar '
+                        'untuk ${DateTime.now().year}–${DateTime.now().year + 1} '
+                        '(ukuran unduhan ${PreloadService.downloadSizeLabel}) '
+                        'agar kalender bisa diakses offline.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.45,
+                          color: colorScheme.onSurface.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Jika dilewati, data dimuat saat dibutuhkan '
+                        '(memerlukan koneksi internet).',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.4,
+                          color: colorScheme.onSurface.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: _startDownload,
+                              child: Text(
+                                'Unduh (${PreloadService.downloadSizeLabel})',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          TextButton(
+                            onPressed: _skipDownload,
+                            child: Text(
+                              'Lewati',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurface
+                                    .withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // ── Download progress ────────────────────────────────────────────
             if (_isDownloading)

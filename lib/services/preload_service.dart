@@ -17,21 +17,36 @@ class PreloadProgress {
 
 class PreloadService {
   static const _preloadYearKey = 'preloadYear';
+  static const _skipYearKey = 'preloadSkipYear';
   static const _staleAge = Duration(hours: 20);
+
+  /// Disclosed to the user before downloading (App Store guideline 4.2.3(ii)).
+  /// 24 months of holiday JSON measures ~75 KB; rounded up for headroom.
+  static const downloadSizeLabel = '±100 KB';
 
   final ApiService api;
 
   PreloadService(this.api);
 
-  // Returns true if a full prefetch should run (first install or new year).
+  // Returns true if a full prefetch should be offered (first install or new
+  // year). Not offered again within the year the user chose to skip — months
+  // are then fetched on demand as the user browses.
   static Future<bool> needsPreload() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getInt(_preloadYearKey) ?? 0) != DateTime.now().year;
+    final year = DateTime.now().year;
+    if ((prefs.getInt(_preloadYearKey) ?? 0) == year) return false;
+    if ((prefs.getInt(_skipYearKey) ?? 0) == year) return false;
+    return true;
   }
 
   static Future<void> markDone() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_preloadYearKey, DateTime.now().year);
+  }
+
+  static Future<void> markSkipped() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_skipYearKey, DateTime.now().year);
   }
 
   // Prefetch all months for the given years, emitting progress events.
