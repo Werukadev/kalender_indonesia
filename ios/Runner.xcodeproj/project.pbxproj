@@ -477,9 +477,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 9K8WXHVML5;
 				ENABLE_BITCODE = NO;
+				FLUTTER_BUILD_NUMBER = 14;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Kalender ID";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -669,9 +670,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 9K8WXHVML5;
 				ENABLE_BITCODE = NO;
+				FLUTTER_BUILD_NUMBER = 14;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Kalender ID";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -701,9 +703,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 9K8WXHVML5;
 				ENABLE_BITCODE = NO;
+				FLUTTER_BUILD_NUMBER = 14;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Kalender ID";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
